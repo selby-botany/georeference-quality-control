@@ -17,6 +17,21 @@ if [[ "${GQC_DEBUG}" == "true" ]]; then set -xv; fi
 export GQC_DEV="${GQC_DEV:-false}"
 GQC_DEV=$(echo "${GQC_DEV}" | tr A-Z a-z)
 
+function gqcw.get_ini() {
+	local var=${1:?Need variable}
+
+    local inifiles=("/usr/local/include/selby/.gqc" "${HOME}/.gqc" "${taskdir}/.gqc")
+    local retval=
+    for inifile in "${inifiles[@]}"; do
+	    if [[ -r "${inifile}" ]]; then
+	        val=$(echo $(cat "${inifile}" | grep --text --extended-regexp -- "^${var}=" | tail -n 1 | cut -d= -f2-))
+	        val=$(echo "${val}" | sed "s/^\([\"']\)\(.*\)\1\$/\2/g")
+	        retval=${val:-${retval}}
+	    fi
+	done
+	echo $retval
+}
+
 function gqcw.main() {
     local prg=${BASH_SOURCE[0]}
     ([[ -n "${prg}" ]] && [[ -f "${prg}" ]]) || (echo "[FATAL] cannot locate: '$0'" 1>&2; exit 1)
@@ -68,8 +83,14 @@ function gqcw.main() {
 	    esac
 	    shift
 	done
-	
-	local opts="--interactive --rm --name botany-gqc --env GQC_DEBUG=${GQC_DEBUG} --env GQC_DEV=${GQC_DEV} --sig-proxy --stop-signal SIGTERM"
+
+    local exports=
+    local host=$(gqcw.get_ini LOCATIONIQ_API_HOST)
+    [[ -n "${host}" ]] && exports="${exports} --env LOCATIONIQ_API_TOKEN=${host}"
+    local token=$(gqcw.get_ini LOCATIONIQ_API_TOKEN)
+    [[ -n "${token}" ]] && exports="${exports} --env LOCATIONIQ_API_TOKEN=${token}"
+
+	local opts="--interactive --rm --name botany-gqc --env GQC_DEBUG=${GQC_DEBUG} --env GQC_DEV=${GQC_DEV} ${exports} --sig-proxy --stop-signal SIGTERM"
 	opts="${opts} --mount type=bind,src=${cachedir},dst=/var/cache/selby"
 	if [[ -n "${logfile}" ]]; then
 		local dir=$(cd $(dirname -- "${logfile}") > /dev/null && pwd)
