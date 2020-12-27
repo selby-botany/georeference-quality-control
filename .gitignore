@@ -1,2 +1,4 @@
 # Ignore Mac meta data
 .DS_Store
+# Ignore log files
+*.log

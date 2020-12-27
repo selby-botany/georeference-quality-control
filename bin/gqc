@@ -1,0 +1,108 @@
+#!/bin/bash
+#
+#    Geolocation Quality Control (gqc)
+#
+#    Copyright (C) 2020 Marie Selby Botanical Gardens
+#
+
+set -o errexit
+set -o errtrace
+set -o functrace
+set -o nounset
+set -o pipefail
+
+export GQC_DEBUG="${GQC_DEBUG:-false}"
+GQC_DEBUG=$(echo "${GQC_DEBUG}" | tr A-Z a-z)
+if [[ "${GQC_DEBUG}" == "true" ]]; then set -xv; fi
+export GQC_DEV="${GQC_DEV:-false}"
+GQC_DEV=$(echo "${GQC_DEV}" | tr A-Z a-z)
+
+function gqcw.main() {
+    local prg=${BASH_SOURCE[0]}
+    ([[ -n "${prg}" ]] && [[ -f "${prg}" ]]) || (echo "[FATAL] cannot locate: '$0'" 1>&2; exit 1)
+    local task=$(basename -- "$0")
+    local taskdir=$(cd $(dirname -- "$0")/.. > /dev/null && pwd)
+
+	local cachedir="${taskdir}/cache"
+	local logdir=
+	local logfile=
+	local Xdebug=false
+	local Xdev=false
+	local Xdryrun=false
+	local Xmount=
+
+	local otherargs=
+	while [[ "${#}" -gt "0" ]]; do
+	    case ${1} in
+	    -C|--cache-directory)
+	        local file="${2}" && shift
+	        ([[ -d "${file}" ]] && [[ -w "${file}" ]]) || (echo "[FATAL] cache directory does not exist or can not be written: '${file}'" 1>&2; exit 1)
+	        cachedir="${file}"
+	        ;;
+	    -L|--log-file)
+	        local file="${2}" && shift
+	        [[ -e "${file}" ]] || (touch -- "${file}" || echo "[FATAL] log file can not be written: '${file}'" 1>&2; exit 1)
+	        [[ -w "${file}" ]] || (echo "[FATAL] log file can not be written: '${file}'" 1>&2; exit 1)
+	        logfile="${file}"
+	        ;;
+	    --Xdebug)
+	        set -xv
+	    	Xdebug=true
+	    	GQC_DEBUG=true
+	    	;;
+	    --Xdev)
+	    	Xdev=true
+	    	GQC_DEV=true
+	    	;;
+	    --Xdryrun)
+	    	Xdryrun=true
+	    	;;
+	    --Xmount)
+	    	Xmount="${Xmount} --mount ${2}" && shift
+	    	Xdev=true
+	    	GQC_DEV=true
+	    	;;
+	    (*)
+	    	otherargs="${otherargs} ${1}"
+	        ;;
+	    esac
+	    shift
+	done
+	
+	local opts="--interactive --rm --name botany-gqc --env GQC_DEBUG=${GQC_DEBUG} --env GQC_DEV=${GQC_DEV} --sig-proxy --stop-signal SIGTERM"
+	opts="${opts} --mount type=bind,src=${cachedir},dst=/var/cache/selby"
+	if [[ -n "${logfile}" ]]; then
+		local dir=$(cd $(dirname -- "${logfile}") > /dev/null && pwd)
+		local file=$(basename -- "${logfile}")
+	    opts="${opts} --mount type=bind,src=${dir},dst=/var/log/selby"
+	    otherargs="--log-file /var/log/selby/${file} ${otherargs}"
+	else
+	    opts="${opts} --mount type=bind,src=${taskdir}/log,dst=/var/log/selby"
+	fi
+	if [[ -n "${Xmount}" ]]; then
+	    opts="${opts} ${Xmount}"
+	fi
+	if [[ "${Xdebug}" == "true" ]]; then
+		otherargs="--Xdebug ${otherargs}"
+	fi
+	if [[ "${Xdev}" == "true" ]]; then
+		opts="${opts} --mount type=bind,src=${taskdir}/src/bin,dst=/usr/local/bin"
+		otherargs="--Xdev ${otherargs}"
+	fi
+
+	if [[ "${Xdryrun}" == "true" ]]; then
+		echo [DRYRUN] docker run ${opts} botany-gqc:latest ${otherargs} "${@}"
+	else
+	    [[ "${Xdebug}" == "true" ]] && echo [DEBUG] docker run ${opts} botany-gqc:latest ${otherargs} "${@}"
+	    GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} docker run ${opts} botany-gqc:latest ${otherargs} "${@}"
+	fi
+}
+
+trap 's=$?; exit $s' HUP INT TERM
+(
+    gqcw.main "$@"
+)
+trap - HUP INT TERM EXIT
+exit 0
+
+

@@ -1,0 +1,585 @@
+#!/bin/bash
+#
+#    Geolocation Quality Control (gqc)
+#
+#    Copyright (C) 2020 Marie Selby Botanical Gardens
+#
+
+set -o errexit
+set -o errtrace
+set -o functrace
+set -o nounset
+set -o pipefail
+
+export GQC_DEBUG="${GQC_DEBUG:-false}"
+GQC_DEBUG=$(echo "${GQC_DEBUG}" | tr A-Z a-z)
+if [[ "${GQC_DEBUG}" == "true" ]]; then set -xv; fi
+export GQC_DEV="${GQC_DEV:-false}"
+GQC_DEV=$(echo "${GQC_DEV}" | tr A-Z a-z)
+
+(( ${BASH_VERSINFO:-0} < 4 )) && (echo "[FATAL] bash version 4 or greater is required" 1>&2; exit 1)
+
+# Script configuration is held in this hash table
+declare -A GQC
+GQC[DEBUG]=false
+GQC[DEV]=false
+GQC[INPUT]="/dev/stdin"
+GQC[OUTPUT]="/dev/stdout"
+GQC[QUIET]=false
+GQC[SEPARATOR]=','
+# 5 digits is ~1 meter resolution
+# 4 digits is ~10 meter resolution
+# 3 digits is ~100 meter resolution
+# 2 digits is ~1 kilometer resolution
+# 1 digits is ~10 kilometer resolution
+GQC[LATITUDE_PRECISION]=3
+GQC[LONGITUDE_PRECISION]=3
+
+declare -A LOCATIONIQ
+LOCATIONIQ[API_TOKEN]="pk.a87ba907e441a0a74b21afaa6ed48821"
+LOCATIONIQ[API_HOST]="us1.locationiq.com"
+
+declare -A LOG
+LOG[DEBUG]=4
+LOG[INFO]=3
+LOG[WARN]=2
+LOG[ERROR]=1
+LOG[FATAL]=0
+LOG[QUIET]=-1
+LOG[_NAME_${LOG[DEBUG]}_]="DEBUG"
+LOG[_NAME_${LOG[INFO]}_]="INFO"
+LOG[_NAME_${LOG[WARN]}_]="WARN"
+LOG[_NAME_${LOG[ERROR]}_]="ERROR"
+LOG[_NAME_${LOG[ERROR]}_]="FATAL"
+LOG[_NAME_${LOG[QUIET]}_]="QUIET"
+LOG[LOGLEVEL]="${LOG[ERROR]}"
+
+
+function cache.__check_function() {
+    local f=${1:-Need function}
+    local func=${f#cache.}
+    local retval=
+    for f in $(declare -F | awk '{ print $3 }' | grep -E '^cache\.' | sed 's/^cache\.//'); do
+        if [[ ${f} = ${func} ]]; then
+            retval="${func}"
+        fi
+    done
+    [[ -n "${retval}" ]] && echo "cache.${retval}"
+}
+
+function cache.__get() {
+    local key="${1:?Need key}"
+    local data_filename=$(cache.get-data-filename "${key}")
+    [[ -r "${data_filename}" ]] && cat "${data_filename}"
+}
+
+function cache.__put() {
+    local key="${1:?Need key}" && shift
+    local data_filename=$(cache.get-data-filename "${key}")
+    local meta_filename=$(cache.get-meta-filename "${key}")
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi > "${data_filename}"
+}
+
+function cache.__update-metadata() {
+    local key="${1:?Need key}"
+    local id=$(cache.key-to-id "${key}")
+    local data_filename=$(cache.get-data-filename "${key}")
+    local sha1=$(cat "${data_filename}" | hash.sha1 | awk '{print $1}')
+    local sha256=$(cat "${data_filename}" | hash.sha256 | awk '{print $1}')
+    local length=$(cat "${data_filename}" | wc -c)
+    local datetime=$(date --utc "+%Y-%m-%dT%TZ")
+    local user=$(whoami)
+    cache.__update-meta-key-value "${key}" "key" "${key}"
+    cache.__update-meta-key-value "${key}" "id" "${id}"
+    cache.__update-meta-key-value "${key}" "modified-at" "${datetime}"
+    cache.__update-meta-key-value "${key}" "modified-by" "${user}"
+    cache.__update-meta-key-value "${key}" "length" "${length}"
+    cache.__update-meta-key-value "${key}" "sha1" "${sha1}"
+    cache.__update-meta-key-value "${key}" "sha256" "${sha256}"
+    true
+}
+
+function cache.__update-meta-key-value() {
+    local key="${1:?Need  key}"
+    local tag="${2:?Need meta tag}"
+    local value="${3:-}"
+    local meta_filename=$(cache.get-meta-filename "${key}")
+    local tmpfile=$(mktemp "${GQC[TASK]}-${GQC[REQUESTID]}-XXXXXXXX.meta.tmp")
+    cache.get-metadata "${key}" | \
+        jq --arg k "${tag}" 'del(.[$k])' | \
+        jq --arg k "${tag}" --arg v "${value}" '.[$k] = $v' \
+        > "${tmpfile}" && \
+        mv "${tmpfile}" "${meta_filename}"
+}
+
+function cache.append() {
+    local cache_data_filename=$(cache.get-data-filename "${1:?Need key}") && shift
+    cache.__put "$@" >> "${cache_data_filename}"
+    cache.__update-metadata "${cache_key}"
+}
+
+function cache.directory() {
+    local result=${GQC[CACHEDIR]}
+    [[ -d "${result}" ]] || mkdir -m 755 -p "${result}"
+    [[ -r "${result}" ]] || chmod 755 "${result}"
+    echo "${result}"
+}
+
+function cache.exists() {
+    local key="${1:?Need key}"
+    local cache_data_filename=$(cache.get-data-filename "${key}")
+    local cache_meta_filename=$(cache.get-meta-filename "${key}")
+    [[ -r "${cache_data_filename}" ]] && [[ -r "${cache_meta_filename}" ]] && \
+    [[ -w "${cache_data_filename}" ]] && [[ -w "${cache_meta_filename}" ]]
+}
+
+function cache.get-data-filename() {
+    local key="${1:?Need key}"
+    local id=$(cache.key-to-id "${key}")
+    echo "$(cache.directory)/${id}.data"
+}
+
+function cache.get-meta-filename() {
+    local key="${1:?Need key}"
+    local id=$(cache.key-to-id "${key}")
+    echo "$(cache.directory)/${id}.meta"
+}
+
+function cache.get() {
+    local key="${1:?Need key}"
+    cache.__get "${key}" || (error "Key «$key» data file '$(cache.get-data-filename \"${key}\")' can not be read" 1>&2 ; exit 1)
+}
+
+function cache.get-metadata() {
+    local key="${1:?Need key}"
+    local meta_filename=$(cache.get-meta-filename "${key}")
+    ([[ -r "${meta_filename}" ]] && cat "${meta_filename}") || jq -n '{}'
+}
+
+function cache.get-with-default() {
+    local key="${1:?Need key}"
+    cache.__get "${key}" || jq -n '{}'
+}
+
+function cache.key-to-id() {
+    local key=${1:?Need key}
+    echo "${key}" | hash.sha1 | awk '{ print $1 }'
+    true
+}
+
+function cache.put() {
+    local key="${1:?Need key}"
+    local data_filename=$(cache.get-data-filename "${key}")
+    cache.__put "$@" > "${data_filename}"
+    cache.__update-metadata "${key}"
+}
+
+function hash.md5() {
+    md5sum | awk '{print $1}'
+}
+
+function hash.sha1() {
+    sha1sum | awk '{print $1}'
+}
+
+function hash.sha224() {
+    sha224sum | awk '{print $1}'
+}
+
+function hash.sha256() {
+    sha256sum | awk '{print $1}'
+}
+
+function hash.sha384() {
+    sha384sum  | awk '{print $1}'
+}
+
+function hash.sha512() {
+    sha512sum | awk '{print $1}'
+}
+
+function locationiq.reverse-geolocate() {
+	local latitude=$(text.trim "${1:?Need latitude}")
+	local longitude=$(text.trim "${2:?Need longitude}")
+	local url=$(locationiq.reverse-geolocate-url "${latitude}" "${longitude}")
+	log.debug "Reverse Geolocate: country=${c_country} div1=${c_state} lat=${latitude} long=${longitude} url=${url}" > /dev/null
+	result=$(curl --silent --get "${url}")
+	local error=$(echo "${result}" | jq .error)
+	[[ -n "${error}" ]] && [[ "${error}" != "null" ]] && (log.error "Reverse geolocate request error: url='${url}' error='${error}'" 1>&2; exit 1)
+	echo "${result}"
+}
+
+function locationiq.reverse-geolocate-url() {
+	local latitude=$(text.trim "${1:?Need latitude}")
+	local longitude=$(text.trim "${2:?Need longitude}")
+	echo "https://${LOCATIONIQ[API_HOST]}/v1/reverse.php?key=${LOCATIONIQ[API_TOKEN]}&lat=${latitude}&lon=${longitude}&format=json"
+}
+
+function log.should-log() {
+	local funcname="${1#log.}"
+	local level="${funcname^^}"
+	([[ "${level}" = "DEBUG" ]] && [[ "${LOG[LOGLEVEL]}" -ge "${LOG[DEBUG]}" ]]) || \
+    ([[ "${level}" = "INFO" ]] && [[ "${LOG[LOGLEVEL]}" -ge "${LOG[INFO]}" ]]) || \
+    ([[ "${level}" = "WARN" ]] && [[ "${LOG[LOGLEVEL]}" -ge "${LOG[WARN]}" ]]) || \
+    ([[ "${level}" = "ERROR" ]] && [[ "${LOG[LOGLEVEL]}" -ge "${LOG[ERROR]}" ]]) || \
+    ([[ "${level}" = "FATAL" ]] && [[ "${LOG[LOGLEVEL]}" -ge "${LOG[FATAL]}" ]])
+}
+
+function log.debug() {
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
+        log.log "[DEBUG] $line"
+    done
+}
+
+function log.dryrun() {
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
+        log.log "[DRYRUN] $line"
+    done
+}
+
+function log.error() {
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
+        log.log "[ERROR] $line"
+    done
+}
+
+function log.fatal() {
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
+        log.log "[FATAL] $line"
+    done
+}
+
+function log.info() {
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
+        log.log "[INFO] $line"
+    done
+}
+
+function log.log() {
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | tee >(log.log-to-logfile) | while read line ; do
+        if log.should-log "${FUNCNAME[1]}"; then
+            echo "${line}"
+        fi
+    done
+}
+
+function log.log-to-logfile() {
+    if [[ -n "${LOG[LOGFILE]:-}" ]]; then
+        local logdate=$(date -u +%Y%m%dT%H%M%S)
+        local rid=
+        [[ -n "${GQC[REQUESTID]:-}" ]] && rid="${GQC[REQUESTID]} ${logdate} "
+        if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
+            echo "${rid}${line}" >> "${LOG[LOGFILE]}"
+        done
+    fi
+}
+
+function log.warn() {
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
+        log.log "[WARN] $line"
+    done
+}
+
+function text.canonicalize() {
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | \
+        text.clean | \
+        tr -d '[:space:]' | \
+        tr -d '[:punct:]' | \
+        tr -d '[:cntrl:]' | \
+        tr 'A-Z' 'a-z'
+}
+
+function text.clean() {
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | \
+        text.trim
+}
+
+function text.trim() {
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | \
+        tr -d '\015' | \
+        sed 's/^[[:space:]]+//' | \
+        sed 's/[[:space:]]+$//'
+}
+
+function util.readlink_e() {
+    local TARGET_FILE=$1
+    cd $(dirname "${TARGET_FILE}")
+    TARGET_FILE=$(basename "${TARGET_FILE}")
+    # Iterate down a (possible) chain of symlinks
+    while [[ -L "${TARGET_FILE}" ]]; do
+        TARGET_FILE=$(readlink "${TARGET_FILE}")
+        cd $(dirname "${TARGET_FILE}")
+        TARGET_FILE=$(basename "${TARGET_FILE}")
+    done
+    # Compute the canonicalized name by finding the physical path 
+    # for the directory we're in and appending the target file.
+    local PHYS_DIR=$(pwd -P)
+    echo "${PHYS_DIR}/${TARGET_FILE}"
+}
+
+function gqc.initialize() {
+    local prg=$(readlink -e "$0")
+    ([[ -n "${prg}" ]] && [[ -f "${prg}" ]]) || (echo "Cannot locate: '$0'" 1>&2; exit 1)
+    local task=$(basename -- "$0")
+    local taskdir=$(cd $(dirname -- "$0") > /dev/null && pwd)
+    local tmpdir="${TMPDIR:-/tmp}"
+    local command="${taskdir}/${task} ${*}"
+    task=${task%%.sh}
+
+    GQC[PRG]="${prg}"
+    GQC[TASK]="${task}"
+    GQC[TASKDIR]="${taskdir}"
+    GQC[COMMAND]="${command}"
+    GQC[REQUESTID]=$(echo "${GQC[TASK]}+$(hostname -f)+$$+$(date -u '+%Y%m%dT%I%M%S')" | hash.sha1 | awk {'print $1'})
+    GQC[CACHEDIR]="/var/cache/selby/${GQC[TASK]}"
+
+    LOG[LOGFILE]="/var/log/selby/${GQC[TASK]}.log"
+}
+
+function gqc.clean-latitude () {
+	if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | text.trim | \
+	    perl -ne 'chop; $_ =~ /^([+-]?\d{1,3}\.\d+)$/; printf("%.'${GQC[LATITUDE_PRECISION]}'f", $1);'
+}
+
+function gqc.clean-longitude () {
+	if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | text.trim | \
+	    perl -ne 'chop; $_ =~ /^([+-]?\d{1,3}\.\d+)$/; printf("%.'${GQC[LONGITUDE_PRECISION]}'f", $1);'
+}
+
+gqc.copyright() {
+    cat <<END_OF_COPYRIGHT
+Geolocation Quality Control (gqc)
+
+Copyright (C) 2020 Marie Selby Botanical Gardens
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+END_OF_COPYRIGHT
+}
+
+function gqc.get-options() {
+	if ! options=$(getopt -n "${GQC[TASK]}" -o 'C:Hi:L:l:o:qs:' -l 'api-token:,cache-directory:,copyright,help,input:,latitude-precision:,log-file:,log-level:,longitude-precision:,output:,quiet,separator:,start-record:,Xdebug,Xdev' -- "$@"); then
+	    # something went wrong, getopt will put out an error message for us
+	    echo 1>&2; gqc.usage 1>&2; exit 1
+	fi
+	eval set -- "${options}"
+	while [[ "${#}" -gt "0" ]]; do
+	    case ${1} in
+	    --api-token)
+	        LOCATIONIQ[API_TOKEN]=$(echo "${2}") && shift
+	        ;;
+	    -C|--cache-directory)
+	        local file="${2}" && shift
+	        [[ -e "${file}" ]] && (! [[ -w "${file}" ]]) ||  (log.fatal "log file can not be written: '${file}'" 1>&2; exit 1)
+	        GQC[CACHEDIR]="${file}"
+	        ;;
+	    --copyright)
+	        gqc.copyright; exit 0
+	        ;;
+	    -H|--help)
+	        gqc.usage; exit 0
+	        ;;
+	    -i|--input)
+	        GQC[INPUT]="${2}" && shift
+	        [[ -r "${GQC[INPUT]}" ]] || (log.fatal "file can not be read: '${GQC[INPUT]}'" 1>&2; exit 1)
+	        ;;
+	    --latitude-precision)
+	        local p="${2}" && shift
+	        (echo "${p}" | grep -E -q '^\d+$') || (log.fatal "invalid latitude-precision: expecting positive integer - '${p}'" 1>&2; exit 1)
+	        GQC[LATITUDE_PRECISION]=${p}
+	        ;;
+	    -L|--log-file)
+	        local file="${2}" && shift
+	        [[ -e "${file}" ]] || (touch -- "${file}" || log.fatal "log file can not be written: '${file}'" 1>&2; exit 1)
+	        [[ -w "${file}" ]] || (chmod +w -- "${file}" || log.fatal "log file can not be written: '${file}'" 1>&2; exit 1)
+	        LOG[LOGFILE]="${file}"
+	        ;;
+	    -l|--log-level)
+	        local level="${2}" && shift
+	        local l=${level^^}
+	        (echo "${l}" | grep -E -q '^(DEBUG|ERROR|INFO|QUIET|WARN)$') || (log.fatal "invalid log level: expecting on of DEBUG, ERROR, INFO, QUIET or WARN - '${level}'" 1>&2; exit 1)
+	        LOG[LOGLEVEL]=${LOG["$l"]}
+	        ;;
+	    --longitude-precision)
+	        local p="${2}" && shift
+	        (echo "${p}" | grep -E -q '^\d+$') || (log.fatal "invalid latitude-precision: expecting positive integer - '${p}'" 1>&2; exit 1)
+	        GQC[LONGITUDE_PRECISION]=${p}
+	        ;;
+	    -o|--output)
+	        GQC[OUTPUT]="${2}" && shift
+	        [[ -w "${GQC[OUTPUT]}" ]] || (log.fatal "file can not be written: '${GQC[OUTPUT]}'" 1>&2; exit 1)
+	        ;;
+	    -q|--quiet)
+	        GQC[QUIET]=true
+	        ;;
+	    -s|--separator)
+	        GQC[SEPARATOR]=$(echo "${2}") && shift
+	        [[ ${#GQC[SEPARATOR]} -eq 1 ]] || (log.fatal "illegal separator '${GQC[SEPARATOR]}': expecting one character" 1>&2; exit 1)
+	        ;;
+	        
+	    --Xdebug)
+	        set -xv
+	    	Xdebug=true
+	    	;;
+	    --Xdev)
+	    	Xdev=true
+	    	GQC_DEV=true
+	    	;;
+	    --Xdebug)
+	        set -xv
+	    	GQC[XDEBUG]=true
+	    	GQC_DEBUG=true
+	    	;;
+	    --Xdev)
+	    	GQC[XDEV]=true
+	    	GQC_DEV=true
+	    	;;
+	    (--) shift; break
+	        ;;
+	    (-*) log.fatal "unrecognized option ${1}" 1>&2; gqc.usage 1>&2; exit 1
+	        ;;
+	    (*) break
+	        ;;
+	    esac
+	    shift
+	done
+	shift $((OPTIND-1))
+}
+
+function gqc.main() {
+	gqc.initialize "$@"
+	gqc.get-options "$@"
+	
+	log.debug "GQC[PRG]=${GQC[PRG]}"
+	log.debug "GQC[TASK]=${GQC[TASK]}"
+	log.debug "GQC[TASKDIR]=${GQC[TASKDIR]}"
+	log.debug "GQC[COMMAND]=${GQC[COMMAND]}"
+	log.debug "GQC[REQUESTID]=${GQC[REQUESTID]}"
+	log.debug "GQC[CACHEDIR]=${GQC[CACHEDIR]}"
+	log.debug "GQC[INPUT]=${GQC[INPUT]}"
+	log.debug "GQC[LATITUDE_PRECISION]=${GQC[LATITUDE_PRECISION]}"
+	log.debug "GQC[LONGITUDE_PRECISION]=${GQC[LONGITUDE_PRECISION]}"
+	log.debug "GQC[OUTPUT]=${GQC[OUTPUT]}"
+	log.debug "GQC[QUIET]=${GQC[QUIET]}"
+	log.debug "GQC[SEPARATOR]=${GQC[SEPARATOR]}"
+	log.debug "LOG[LOGFILE]=${LOG[LOGFILE]}"
+	log.debug "LOG[LOGLEVEL]=${LOG[LOGLEVEL]}"
+	log.debug "LOCATIONIQ[API_TOKEN]=${LOCATIONIQ[API_TOKEN]}"
+	
+	local n=0
+	
+	local OLDIFS="${IFS}"
+	IFS="${GQC[SEPARATOR]}"
+	local country state selbyNumber latitude longitude
+	cat "${GQC[INPUT]}" | tail -n +2 | text.trim | while read country state selbyNumber latitude longitude ; do
+	    log.debug "raw-record: country='${country}' state='${state}' selbyNumber='${selbyNumber}' latitude='${latitude}' longitude='${longitude}'"
+	    (echo "${country}" | text.trim | grep -q '^#') && continue # Skip comment lines
+	    local c_country=$(text.canonicalize "${country}")
+	    local c_state=$(text.canonicalize "${state}")
+	    local c_latitude=$(gqc.clean-latitude "${latitude}")
+	    local c_longitude=$(gqc.clean-latitude "${longitude}")
+	    log.debug "cleaned: c_country='${c_country}' c_state='${c_state}' selbyNumber='${selbyNumber}' c_latitude='${c_latitude}' c_longitude='${c_longitude}'"
+	    local response=$(gqc.reverse-geolocate ${latitude} ${longitude})
+		local url=$(locationiq.reverse-geolocate-url "${latitude}" "${longitude}")
+		log.debug "[lat=${latitude}, lon=${longitude}] => ${response}"
+	    local r_country=$(echo "${response}" | jq .address.country | tr -d '"')
+	    local r_country_code=$(echo "${response}" | jq .address.country_code | tr -d '"')
+	    local r_state=$(echo "${response}" | jq .address.state | tr -d '"')
+	    local r_county=$(echo "${response}" | jq .address.county | tr -d '"')
+	    local r_city=$(echo "${response}" | jq .address.city | tr -d '"')
+	    local r_region=$(echo "${response}" | jq .address.region | tr -d '"')
+	    local r_display_name=$(echo "${response}" | jq .display_name | tr -d '"')
+	    local c_r_country=$(text.canonicalize "${r_country}")
+	    local c_r_country_code=$(text.canonicalize "${r_country_code}")
+	    local c_r_state=$(text.canonicalize "${r_state}")
+	    local c_r_county=$(text.canonicalize "${r_county}")
+	    local c_r_city=$(text.canonicalize "${r_city}")
+	    local c_r_region=$(text.canonicalize "${r_region}")
+	
+	    log.info "Reverse geoCode: {sn=$selbyNumber, country=\"$country\", div1=\"${state}\", lat=$latitude, lon=$longitude} => {country=\"$r_country\", state=\"$r_state\", response=${response}}}"
+	    if [[ "${c_r_country}" != "${c_country}" ]]; then
+	        log.error "SN-${selbyNumber}: country '${country}' != reverse geocode '${r_country}'" 1>&2
+	    elif [[ "${c_r_state}" != "${c_state}" ]]; then
+	        log.error "SN-${selbyNumber}: div1 '${state}' != reverse geocode '${r_state}'" 1>&2
+	    fi
+
+		# TODO - Add a start and end record number to process; syntactic sugar for piping the dataset through head and tail.
+	    n=$((n+1))
+	    if false; then if [[ "${n}" -gt 1 ]]; then exit 0; fi fi
+	done
+	IFS="${OLDIFS}"
+}
+
+function gqc.reverse-geolocate() {
+	local latitude=$(text.trim "${1:?Need latitude}")
+	local longitude=$(text.trim "${2:?Need longitude}")   
+	local cachekey="latitude:${latitude},longitude:${longitude}"
+	if cache.__get "${cachekey}"; then
+	    # get writes the record to stdout, so nothing to do here
+		true
+	else
+		result=$(locationiq.reverse-geolocate ${latitude} ${longitude})
+		cache.put "${cachekey}" "${result}"
+		echo "${result}"
+	fi
+}
+
+function gqc.usage() {
+    cat <<END_OF_USAGE
+Usage: ${GQC[TASK]} [OPTION]...
+
+Performs a georeferencing quality control check. The input file is in
+CSV (comma separated values), but a different field separater can be
+specified with the --separator option.
+
+Input is read from stdin unless the --input option is given.
+
+Output is to stdout unless the --output option is given.
+
+      --api-token              LocationIQ API token
+  -C, --cache-directory d      Cache directory; defaults to /var/cache/selby/gqc
+      --copyright              Display the copyright and exit
+  -H, --help                   Display this help and exit
+      --latitude-precision p   Number of fractional digits of precision in latitude; defaults to 3
+  -L, --log-file               The log file; defaults to /var/log/selby/gqc.log
+  -l, --log-level              Sets the lowest severity level of log messages to show; one of DEBUG, INFO, WARN, ERROR, or QUIET; defaults to FATAL
+      --longitude-precision p  Number of fractional digits of precision in longitude; defaults to 3
+  -q, --quiet                  Don't display any messages
+  -s, --separator s            Field separator; defaults to ","
+      --Xdebug                 Enable execution tracing
+      --Xdev                   Enable developer mode; mounts `src` and `data`
+      --Xdryrun                Display the docker command to be run and exit
+      --Xmount                 Additional docker mount specification (implies --Xdev)
+  
+The --latitude-precision and --longitude-precision values specify the precision of
+the location's coordinates, and hence specify the "resolution" of the location; i.e. how
+many fractional decimal digits are used to identify a geolocation. More digits means a finer
+resolution. Coordinates that are equal, after rounding to the specified number of fractional
+digits, are considered to be the same location. Near the equator the approximate resolution
+corresponding to different precisions:
+	
+    5 digits is ~1 meter resolution
+    4 digits is ~10 meter resolution
+    3 digits is ~100 meter resolution
+    2 digits is ~1 kilometer resolution
+    1 digits is ~10 kilometer resolution
+
+END_OF_USAGE
+}
+
+trap 's=$?; exit $s' HUP INT TERM
+(
+    gqc.main "$@"
+)
+trap - HUP INT TERM EXIT
+exit 0
