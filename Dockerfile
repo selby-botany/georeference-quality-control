@@ -1,3 +1,9 @@
+#
+#    Geolocation Quality Control (gqc)
+#
+#    Copyright (C) 2020 Marie Selby Botanical Gardens
+#
+
 FROM ubuntu:20.04
 
 LABEL name="gqc"
