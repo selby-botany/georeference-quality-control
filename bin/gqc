@@ -23,103 +23,103 @@ task=$(basename -- "$0")
 taskdir=$(cd $(dirname -- "$0")/.. > /dev/null && pwd)
 
 function gqcw.get_ini() {
-	local var=${1:?Need variable}
+    local var=${1:?Need variable}
 
     local inifiles=("/usr/local/include/selby/.gqc" "${HOME}/.gqc" "${taskdir}/.gqc")
     local retval=
     for inifile in "${inifiles[@]}"; do
-	    if [[ -r "${inifile}" ]]; then
-	        val=$(cat "${inifile}" | grep --text --extended-regexp -- "^${var}=" | tail -n 1 | cut -d= -f2- | sed "s/^\([\"']\)\(.*\)\1\$/\2/g")
-	        retval=${val:-${retval}}
-	    fi
-	done
-	echo $retval
+        if [[ -r "${inifile}" ]]; then
+            val=$(cat "${inifile}" | grep --text --extended-regexp -- "^${var}=" | tail -n 1 | cut -d= -f2- | sed "s/^\([\"']\)\(.*\)\1\$/\2/g")
+            retval=${val:-${retval}}
+        fi
+    done
+    echo $retval
 }
 
 function gqcw.main() {
-	local cachedir="${taskdir}/cache"
-	local logdir=
-	local logfile=
-	local Xdebug=false
-	local Xdockerargs=
-	local Xdev=false
-	local Xdryrun=false
-	local Ximage=selbybotany/gqc:$(cd "${taskdir}" && git branch --show-current)
-	local Xcontainer=$(echo "${Ximage}" | cut -d: -f1 | tr -d '[:space:]' | tr -c '[:alnum:]' '-')
-	local Xmount=
+    local cachedir="${taskdir}/cache"
+    local logdir=
+    local logfile=
+    local Xdebug=false
+    local Xdockerargs=
+    local Xdev=false
+    local Xdryrun=false
+    local Ximage=selbybotany/gqc:$(cd "${taskdir}" && git branch --show-current)
+    local Xcontainer=$(echo "${Ximage}" | cut -d: -f1 | tr -d '[:space:]' | tr -c '[:alnum:]' '-')
+    local Xmount=
 
-	local otherargs=
-	while [[ "${#}" -gt "0" ]]; do
-	    case ${1} in
-	    -C|--cache-directory)
-	        local file="${2}" && shift
-	        ([[ -d "${file}" ]] && [[ -w "${file}" ]]) || (echo "[FATAL] cache directory does not exist or can not be written: '${file}'" 1>&2; exit 1)
-	        cachedir="${file}"
-	        ;;
-	    -L|--log-file)
-	        local file="${2}" && shift
-	        [[ -e "${file}" ]] || (touch -- "${file}" || echo "[FATAL] log file can not be written: '${file}'" 1>&2; exit 1)
-	        [[ -w "${file}" ]] || (echo "[FATAL] log file can not be written: '${file}'" 1>&2; exit 1)
-	        logfile="${file}"
-	        ;;
-	    --Xdebug)
-	        set -xv
-	    	Xdebug=true
-	    	GQC_DEBUG=true
-	    	;;
-	    --Xdev)
-	    	Xdev=true
-	    	GQC_DEV=true
-	    	;;
-	    --Xdryrun)
-	    	Xdryrun=true
-	    	;;
-	    --Ximage)
-	    	Ximage="${2}" && shift
-	    	Xcontainer=$(echo "${Ximage}" | cut -d: -f1 | tr -d '[:space:]' | tr -c '[:alnum:]' '-')
-	    	;;
-	    --Xcontainer-name)
-	    	Xcontainer="${2}" && shift
-	    	;;
+    local otherargs=
+    while [[ "${#}" -gt "0" ]]; do
+        case ${1} in
+        -C|--cache-directory)
+            local file="${2}" && shift
+            ([[ -d "${file}" ]] && [[ -w "${file}" ]]) || (echo "[FATAL] cache directory does not exist or can not be written: '${file}'" 1>&2; exit 1)
+            cachedir="${file}"
+            ;;
+        -L|--log-file)
+            local file="${2}" && shift
+            [[ -e "${file}" ]] || (touch -- "${file}" || echo "[FATAL] log file can not be written: '${file}'" 1>&2; exit 1)
+            [[ -w "${file}" ]] || (echo "[FATAL] log file can not be written: '${file}'" 1>&2; exit 1)
+            logfile="${file}"
+            ;;
+        --Xdebug)
+            set -xv
+            Xdebug=true
+            GQC_DEBUG=true
+            ;;
+        --Xdev)
+            Xdev=true
+            GQC_DEV=true
+            ;;
+        --Xdryrun)
+            Xdryrun=true
+            ;;
+        --Ximage)
+            Ximage="${2}" && shift
+            Xcontainer=$(echo "${Ximage}" | cut -d: -f1 | tr -d '[:space:]' | tr -c '[:alnum:]' '-')
+            ;;
+        --Xcontainer-name)
+            Xcontainer="${2}" && shift
+            ;;
         --Xdockerargs)
             Xdockerargs="${Xdockerargs} ${2}" && shift
             ;;
-	    --Xmount)
-	    	Xmount="${Xmount} --mount ${2}" && shift
-	    	Xdev=true
-	    	GQC_DEV=true
-	    	;;
-	    (*)
-	    	otherargs="${otherargs} ${1}"
-	        ;;
-	    esac
-	    shift
-	done
+        --Xmount)
+            Xmount="${Xmount} --mount ${2}" && shift
+            Xdev=true
+            GQC_DEV=true
+            ;;
+        (*)
+            otherargs="${otherargs} ${1}"
+            ;;
+        esac
+        shift
+    done
 
-	local image=$(docker images | awk '{ printf("%s:%s\n",$1,$2) }' | grep -- "${Ximage}" | head -n 1 | awk '{ print $1 }')
-	if [[ "${Xdev}" != "true" ]] && [[ -z "${image}" ]]; then
-	    # First try pulling it
-	    cd "${taskdir}"
-	    (
-	    	echo "[INFO] pulling image from github: '${Ximage}' ..." &&
-	    	docker pull "${Ximage}" >/dev/null 2>&1 &&
-	    	echo "[INFO] image pulled from github: '${Ximage}'"
-	    ) || echo "[INFO] image not found on github: '${Ximage}' ..."
-	fi
-	local image=$(docker images | awk '{ printf("%s:%s\n",$1,$2) }' | grep -- "${Ximage}" | head -n 1 | awk '{ print $1 }')
-	if [[ -z "${image}" ]]; then
-		cd "${taskdir}"
-	    local tmp="${TMPDIR}/${task}-${$}-${RANDOM}"
-	    echo "[INFO] building image: '${Ximage}' ..."
-	    if ! (docker build --tag "${Ximage}" . >${tmp} 2>&1); then
-        	echo "[FATAL] image can not be built: '${Ximage}'" 1>&2
-         	cat "${tmp}" | while read line ; do
-         	    echo "[DEBUG] ${line}'" 1>&2
-         	done
-         	exit 1
-     	fi
-		echo "[INFO] image build complete: '${Ximage}' ..."
-	fi
+    local image=$(docker images | awk '{ printf("%s:%s\n",$1,$2) }' | grep -- "${Ximage}" | head -n 1 | awk '{ print $1 }')
+    if [[ "${Xdev}" != "true" ]] && [[ -z "${image}" ]]; then
+        # First try pulling it
+        cd "${taskdir}"
+        (
+            echo "[INFO] pulling image from github: '${Ximage}' ..." &&
+            docker pull "${Ximage}" >/dev/null 2>&1 &&
+            echo "[INFO] image pulled from github: '${Ximage}'"
+        ) || echo "[INFO] image not found on github: '${Ximage}' ..."
+    fi
+    local image=$(docker images | awk '{ printf("%s:%s\n",$1,$2) }' | grep -- "${Ximage}" | head -n 1 | awk '{ print $1 }')
+    if [[ -z "${image}" ]]; then
+        cd "${taskdir}"
+        local tmp="${TMPDIR}/${task}-${$}-${RANDOM}"
+        echo "[INFO] building image: '${Ximage}' ..."
+        if ! (docker build --tag "${Ximage}" . >${tmp} 2>&1); then
+            echo "[FATAL] image can not be built: '${Ximage}'" 1>&2
+             cat "${tmp}" | while read line ; do
+                 echo "[DEBUG] ${line}'" 1>&2
+             done
+             exit 1
+         fi
+        echo "[INFO] image build complete: '${Ximage}' ..."
+    fi
 
     local exports=
     local host=$(gqcw.get_ini LOCATIONIQ_API_HOST)
@@ -127,34 +127,34 @@ function gqcw.main() {
     local token=$(gqcw.get_ini LOCATIONIQ_API_TOKEN)
     [[ -n "${token}" ]] && exports="${exports} --env LOCATIONIQ_API_TOKEN=${token}"
 
-	local opts="--interactive --rm --name "${Xcontainer}" ${Xdockerargs} --env GQC_DEBUG=${GQC_DEBUG} --env GQC_DEV=${GQC_DEV} ${exports} --sig-proxy --stop-signal SIGTERM"
-	opts="${opts} --mount type=bind,src=${cachedir},dst=/var/cache/selby"
-	if [[ -n "${logfile}" ]]; then
-		local dir=$(cd $(dirname -- "${logfile}") > /dev/null && pwd)
-		local file=$(basename -- "${logfile}")
-	    opts="${opts} --mount type=bind,src=${dir},dst=/var/log/selby"
-	    otherargs="--log-file /var/log/selby/${file} ${otherargs}"
-	else
-	    opts="${opts} --mount type=bind,src=${taskdir}/log,dst=/var/log/selby"
-	fi
-	if [[ -n "${Xmount}" ]]; then
-	    opts="${opts} ${Xmount}"
-	fi
-	if [[ "${Xdebug}" == "true" ]]; then
-		otherargs="--Xdebug ${otherargs}"
-	fi
-	if [[ "${Xdev}" == "true" ]]; then
-		opts="${opts} --mount type=bind,src=${taskdir}/src/bin,dst=/usr/local/bin"
-		otherargs="--Xdev ${otherargs}"
-	fi
+    local opts="--interactive --rm --name "${Xcontainer}" ${Xdockerargs} --env GQC_DEBUG=${GQC_DEBUG} --env GQC_DEV=${GQC_DEV} ${exports} --sig-proxy --stop-signal SIGTERM"
+    opts="${opts} --mount type=bind,src=${cachedir},dst=/var/cache/selby"
+    if [[ -n "${logfile}" ]]; then
+        local dir=$(cd $(dirname -- "${logfile}") > /dev/null && pwd)
+        local file=$(basename -- "${logfile}")
+        opts="${opts} --mount type=bind,src=${dir},dst=/var/log/selby"
+        otherargs="--log-file /var/log/selby/${file} ${otherargs}"
+    else
+        opts="${opts} --mount type=bind,src=${taskdir}/log,dst=/var/log/selby"
+    fi
+    if [[ -n "${Xmount}" ]]; then
+        opts="${opts} ${Xmount}"
+    fi
+    if [[ "${Xdebug}" == "true" ]]; then
+        otherargs="--Xdebug ${otherargs}"
+    fi
+    if [[ "${Xdev}" == "true" ]]; then
+        opts="${opts} --mount type=bind,src=${taskdir}/src/bin,dst=/usr/local/bin"
+        otherargs="--Xdev ${otherargs}"
+    fi
 
-	local cmd="docker run ${opts} ${Ximage} ${otherargs}"
-	if [[ "${Xdryrun}" == "true" ]]; then
-		echo "[DRYRUN] GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd}" "${@}"
-	else
-	    [[ "${Xdebug}" == "true" ]] && echo "[DEBUG] GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd}" "${@}"
-	    GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd} "${@}"
-	fi
+    local cmd="docker run ${opts} ${Ximage} ${otherargs}"
+    if [[ "${Xdryrun}" == "true" ]]; then
+        echo "[DRYRUN] GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd}" "${@}"
+    else
+        [[ "${Xdebug}" == "true" ]] && echo "[DEBUG] GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd}" "${@}"
+        GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd} "${@}"
+    fi
 }
 
 trap 's=$?; rm -r ${TMPDIR}/${task}-${$}; exit $s' HUP INT TERM

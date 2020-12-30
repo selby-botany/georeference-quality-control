@@ -70,16 +70,16 @@ utility. A wrapper script is provided that invokes `docker` with all the usual o
 
 ## Usage
 
-	Usage: gqc [OPTION]...
-	
-	Performs a georeferencing quality control check. The input file is in
-	CSV (comma separated values) format (see below), but a different field
-	separator can be specified with the --separator option.
-	
-	Input is read from stdin unless the --input option is given.
-	
-	Output is to stdout unless the --output option is given.
-	
+    Usage: gqc [OPTION]...
+    
+    Performs a georeferencing quality control check. The input file is in
+    CSV (comma separated values) format (see below), but a different field
+    separator can be specified with the --separator option.
+    
+    Input is read from stdin unless the --input option is given.
+    
+    Output is to stdout unless the --output option is given.
+    
           --api-token              LocationIQ API token
       -C, --cache-directory d      Cache directory; defaults to HOME/cache/selby/gqc
           --copyright              Display copyright and exit
@@ -98,18 +98,18 @@ utility. A wrapper script is provided that invokes `docker` with all the usual o
           --Xdryrun                Display the docker command to be run and exit
           --Xmount                 Additional docker mount specification (implies --Xdev)
 
-	The --latitude-precision and --longitude-precision values specify the precision of
-	the location's coordinates, and hence specify the "resolution" of the location; i.e. how
-	many fractional decimal digits are used to identify a geolocation. More digits means a finer
-	resolution. Coordinates that are equal, after rounding to the specified number of fractional
-	digits, are considered to be the same location. Near the equator the approximate resolution
-	corresponding to different precisions:
-	
-	    5 digits is ~1 meter resolution
-	    4 digits is ~10 meter resolution
-	    3 digits is ~100 meter resolution
-	    2 digits is ~1 kilometer resolution
-	    1 digits is ~10 kilometer resolution 
+    The --latitude-precision and --longitude-precision values specify the precision of
+    the location's coordinates, and hence specify the "resolution" of the location; i.e. how
+    many fractional decimal digits are used to identify a geolocation. More digits means a finer
+    resolution. Coordinates that are equal, after rounding to the specified number of fractional
+    digits, are considered to be the same location. Near the equator the approximate resolution
+    corresponding to different precisions:
+    
+        5 digits is ~1 meter resolution
+        4 digits is ~10 meter resolution
+        3 digits is ~100 meter resolution
+        2 digits is ~1 kilometer resolution
+        1 digits is ~10 kilometer resolution 
 
 ## Data Formats
 
@@ -134,26 +134,26 @@ the file is ignored.
 
 1. Print help.
 
-	$ /opt/pkg/bin/bash bin/gqc --help
-	Usage: gqc [OPTION]...
-	        .
-	        .
-	        .
+    $ /opt/pkg/bin/bash bin/gqc --help
+    Usage: gqc [OPTION]...
+            .
+            .
+            .
 
 2. Performs a georeferencing quality control check on the first few records of the Ecuador example data file.
 
-	$ cat data/gqc-ecuador.csv | head -20 | /opt/pkg/bin/bash bin/gqc
-	[ERROR] SN-53823: country 'Ecuador' != reverse geocode 'Antigua and Barbuda'
-	        .
-	        .
-	        .
-	$ # Get all the details
-	$ grep 53823 log/gqc.log
-	27122b87e1780cf2d01ae21af5ec4f59ce959994 20201226T214818 [DEBUG] raw-record: country='Ecuador' state='' selbyNumber='53823' latitude='17.08573' longitude='-61.799254'
-	27122b87e1780cf2d01ae21af5ec4f59ce959994 20201226T214818 [DEBUG] cleaned: c_country='ecuador' c_state='' selbyNumber='53823' c_latitude='17.086' c_longitude='-61.799'
-	27122b87e1780cf2d01ae21af5ec4f59ce959994 20201226T214819 [INFO] Reverse geoCode: {sn=53823, country="Ecuador", div1="", lat=17.08573, lon=-61.799254} => {country="Antigua and Barbuda", state="null", response={"place_id":"118516782","licence":"https://locationiq.com/attribution","osm_type":"way","osm_id":"150137622","lat":"17.0863473","lon":"-61.8009697004625","display_name":"Lebanon Moravian Church;Seaview Farm Moravian Church, Church Lane, Sea View Farm, Saint George, ANU, Antigua and Barbuda","address":{"place_of_worship":"Lebanon Moravian Church;Seaview Farm Moravian Church","road":"Church Lane","village":"Sea View Farm","region":"Saint George","postcode":"ANU","country":"Antigua and Barbuda","country_code":"ag"},"boundingbox":["17.0862361","17.0864356","-61.8010773","-61.8008621"]}}}
-	27122b87e1780cf2d01ae21af5ec4f59ce959994 20201226T214819 [ERROR] SN-53823: country 'Ecuador' != reverse geocode 'Antigua and Barbuda'
-	
+    $ cat data/gqc-ecuador.csv | head -20 | /opt/pkg/bin/bash bin/gqc
+    [ERROR] SN-53823: country 'Ecuador' != reverse geocode 'Antigua and Barbuda'
+            .
+            .
+            .
+    $ # Get all the details
+    $ grep 53823 log/gqc.log
+    27122b87e1780cf2d01ae21af5ec4f59ce959994 20201226T214818 [DEBUG] raw-record: country='Ecuador' state='' selbyNumber='53823' latitude='17.08573' longitude='-61.799254'
+    27122b87e1780cf2d01ae21af5ec4f59ce959994 20201226T214818 [DEBUG] cleaned: c_country='ecuador' c_state='' selbyNumber='53823' c_latitude='17.086' c_longitude='-61.799'
+    27122b87e1780cf2d01ae21af5ec4f59ce959994 20201226T214819 [INFO] Reverse geoCode: {sn=53823, country="Ecuador", div1="", lat=17.08573, lon=-61.799254} => {country="Antigua and Barbuda", state="null", response={"place_id":"118516782","licence":"https://locationiq.com/attribution","osm_type":"way","osm_id":"150137622","lat":"17.0863473","lon":"-61.8009697004625","display_name":"Lebanon Moravian Church;Seaview Farm Moravian Church, Church Lane, Sea View Farm, Saint George, ANU, Antigua and Barbuda","address":{"place_of_worship":"Lebanon Moravian Church;Seaview Farm Moravian Church","road":"Church Lane","village":"Sea View Farm","region":"Saint George","postcode":"ANU","country":"Antigua and Barbuda","country_code":"ag"},"boundingbox":["17.0862361","17.0864356","-61.8010773","-61.8008621"]}}}
+    27122b87e1780cf2d01ae21af5ec4f59ce959994 20201226T214819 [ERROR] SN-53823: country 'Ecuador' != reverse geocode 'Antigua and Barbuda'
+    
 The first field in the log records is a "request identifier" unique to each command invocation. All the log records created by a command will have the same request identifier.
 
 The second field is a timestamp for the log entry.

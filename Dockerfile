@@ -23,9 +23,9 @@ RUN apt-get update && \
     apt-get install -y --force-yes \
              apt-utils \
              curl \
-    	     jq \
-			 perl \
-		     tini  && \
+             jq \
+             perl \
+             tini  && \
     mkdir -p /var/log/selby \
              /var/cache/selby/gqc \
              /var/data/selby/gqc
