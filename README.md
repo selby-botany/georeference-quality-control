@@ -94,6 +94,7 @@ utility. A wrapper script is provided that invokes `docker` with all the usual o
       -s, --separator s            Field separator; defaults to ","
           --Xdebug                 Enable execution tracing
           --Xdev                   Enable developer mode
+          --Xdockerargs args       String of arguments to add to docker invocation.
           --Xdryrun                Display the docker command to be run and exit
           --Xmount                 Additional docker mount specification (implies --Xdev)
 

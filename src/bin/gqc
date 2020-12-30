@@ -540,6 +540,7 @@ Output is to stdout unless the --output option is given.
   -s, --separator s            Field separator; defaults to ","
       --Xdebug                 Enable execution tracing
       --Xdev                   Enable developer mode; mounts `src` and `data`
+      --Xdockerargs args       String of arguments to add to docker invocation.
       --Xdryrun                Display the docker command to be run and exit
       --Xmount                 Additional docker mount specification (implies --Xdev)
   

@@ -41,6 +41,7 @@ function gqcw.main() {
 	local logdir=
 	local logfile=
 	local Xdebug=false
+	local Xdockerargs=
 	local Xdev=false
 	local Xdryrun=false
 	local Ximage=selbybotany/gqc:$(cd "${taskdir}" && git branch --show-current)
@@ -80,6 +81,9 @@ function gqcw.main() {
 	    --Xcontainer-name)
 	    	Xcontainer="${2}" && shift
 	    	;;
+        --Xdockerargs)
+            Xdockerargs="${Xdockerargs} ${2}" && shift
+            ;;
 	    --Xmount)
 	    	Xmount="${Xmount} --mount ${2}" && shift
 	    	Xdev=true
@@ -123,7 +127,7 @@ function gqcw.main() {
     local token=$(gqcw.get_ini LOCATIONIQ_API_TOKEN)
     [[ -n "${token}" ]] && exports="${exports} --env LOCATIONIQ_API_TOKEN=${token}"
 
-	local opts="--interactive --rm --name "${Xcontainer}" --env GQC_DEBUG=${GQC_DEBUG} --env GQC_DEV=${GQC_DEV} ${exports} --sig-proxy --stop-signal SIGTERM"
+	local opts="--interactive --rm --name "${Xcontainer}" ${Xdockerargs} --env GQC_DEBUG=${GQC_DEBUG} --env GQC_DEV=${GQC_DEV} ${exports} --sig-proxy --stop-signal SIGTERM"
 	opts="${opts} --mount type=bind,src=${cachedir},dst=/var/cache/selby"
 	if [[ -n "${logfile}" ]]; then
 		local dir=$(cd $(dirname -- "${logfile}") > /dev/null && pwd)
@@ -144,15 +148,16 @@ function gqcw.main() {
 		otherargs="--Xdev ${otherargs}"
 	fi
 
+	local cmd="docker run ${opts} ${Ximage} ${otherargs}"
 	if [[ "${Xdryrun}" == "true" ]]; then
-		echo [DRYRUN] docker run ${opts} "${Ximage}" ${otherargs} "${@}"
+		echo "[DRYRUN] GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd}" "${@}"
 	else
-	    [[ "${Xdebug}" == "true" ]] && echo [DEBUG] docker run ${opts} "${Ximage}" ${otherargs} "${@}"
-	    GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} docker run ${opts} "${Ximage}" ${otherargs} "${@}"
+	    [[ "${Xdebug}" == "true" ]] && echo "[DEBUG] GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd}" "${@}"
+	    GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd} "${@}"
 	fi
 }
 
-trap 's=$?; rm -r ${TMPDIR}/${task}-${$} exit $s' HUP INT TERM
+trap 's=$?; rm -r ${TMPDIR}/${task}-${$}; exit $s' HUP INT TERM
 (
     gqcw.main "$@"
 )
