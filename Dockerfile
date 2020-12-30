@@ -32,7 +32,7 @@ RUN apt-get update && \
              /var/data/selby/gqc
 
 # Install our stuff
-COPY src/* /usr/local/selby/
+COPY src /usr/local/selby/
 
 # Expose these directories as mount points
 VOLUME ["/usr/local/selby", "/var/cache/selby", "/var/data/selby", "/var/log/selby"]
