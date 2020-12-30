@@ -42,6 +42,7 @@ function gqcw.main() {
     local logfile=
     local Xdebug=false
     local Xdockerargs=
+    local Xdockercmd=
     local Xdev=false
     local Xdryrun=false
     local Ximage=selbybotany/gqc:$(cd "${taskdir}" && git branch --show-current)
@@ -62,6 +63,9 @@ function gqcw.main() {
             [[ -w "${file}" ]] || (echo "[FATAL] log file can not be written: '${file}'" 1>&2; exit 1)
             logfile="${file}"
             ;;
+        --Xcontainer-name)
+            Xcontainer="${2}" && shift
+            ;;
         --Xdebug)
             set -xv
             Xdebug=true
@@ -71,18 +75,18 @@ function gqcw.main() {
             Xdev=true
             GQC_DEV=true
             ;;
+        --Xdockerargs)
+            Xdockerargs="${Xdockerargs} ${2}" && shift
+            ;;
+        --Xdockercmd)
+            Xdockercmd="${2}" && shift
+            ;;
         --Xdryrun)
             Xdryrun=true
             ;;
         --Ximage)
             Ximage="${2}" && shift
             Xcontainer=$(echo "${Ximage}" | cut -d: -f1 | tr -d '[:space:]' | tr -c '[:alnum:]' '-')
-            ;;
-        --Xcontainer-name)
-            Xcontainer="${2}" && shift
-            ;;
-        --Xdockerargs)
-            Xdockerargs="${Xdockerargs} ${2}" && shift
             ;;
         --Xmount)
             Xmount="${Xmount} --mount ${2}" && shift
@@ -148,7 +152,7 @@ function gqcw.main() {
         otherargs="--Xdev ${otherargs}"
     fi
 
-    local cmd="docker run ${opts} ${Ximage} ${otherargs}"
+    local cmd="docker run ${opts} ${Ximage} ${Xdockercmd} ${otherargs}"
     if [[ "${Xdryrun}" == "true" ]]; then
         echo "[DRYRUN] GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd}" "${@}"
     else
