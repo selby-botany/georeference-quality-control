@@ -8,6 +8,7 @@ FROM ubuntu:20.04
 
 LABEL name="gqc"
 LABEL description="Geolocation Quality Control (gcq)"
+LABEL copyright="Copyright (C) 2020 Marie Selby Botanical Gardens"
 LABEL version="0.0.1"
 
 LABEL organization="Marie Selby Botanical Gardens <https://selby.org/>"
@@ -22,7 +23,9 @@ RUN apt-get update && \
     apt-get install -y --force-yes \
              apt-utils \
              curl \
-    	     jq && \
+    	     jq \
+			 perl \
+		     tini  && \
     mkdir -p /var/log/selby \
              /var/cache/selby/gqc \
              /var/data/selby/gqc
@@ -34,4 +37,5 @@ COPY src/bin/gqc /usr/local/bin/gqc
 VOLUME ["/var/log/selby", "/var/cache/selby", "/var/data/selby"]
 
 # Make the image run like the script
-ENTRYPOINT ["/usr/local/bin/gqc"]
+ENTRYPOINT ["/tini", "--"]
+CMD ["/usr/local/bin/gqc"]
