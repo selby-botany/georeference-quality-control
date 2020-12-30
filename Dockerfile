@@ -36,6 +36,6 @@ COPY src/bin/gqc /usr/local/bin/gqc
 # Expose these directories as mount points
 VOLUME ["/var/log/selby", "/var/cache/selby", "/var/data/selby"]
 
-# Make the image run like the script
-ENTRYPOINT ["/tini", "--"]
+# Add Tini
+ENTRYPOINT ["/bin/tini", "--"]
 CMD ["/usr/local/bin/gqc"]
