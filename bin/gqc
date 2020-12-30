@@ -25,7 +25,7 @@ taskdir=$(cd $(dirname -- "$0")/.. > /dev/null && pwd)
 function gqcw.get_ini() {
     local var=${1:?Need variable}
 
-    local inifiles=("/usr/local/include/selby/.gqc" "${HOME}/.gqc" "${taskdir}/.gqc")
+    local inifiles=("/usr/local/selby/include/gqc.init" "${HOME}/.gqc" "${taskdir}/gqc.init")
     local retval=
     for inifile in "${inifiles[@]}"; do
         if [[ -r "${inifile}" ]]; then
@@ -40,10 +40,10 @@ function gqcw.main() {
     local cachedir="${taskdir}/cache"
     local logdir=
     local logfile=
-    local Xdebug=false
+    local Xdebug=${GQC_DEBUG}
     local Xdockerargs=
     local Xdockercmd=
-    local Xdev=false
+    local Xdev=${GQC_DEV}
     local Xdryrun=false
     local Ximage=selbybotany/gqc:$(cd "${taskdir}" && git branch --show-current)
     local Xcontainer=$(echo "${Ximage}" | cut -d: -f1 | tr -d '[:space:]' | tr -c '[:alnum:]' '-')
@@ -144,12 +144,12 @@ function gqcw.main() {
     if [[ -n "${Xmount}" ]]; then
         opts="${opts} ${Xmount}"
     fi
-    if [[ "${Xdebug}" == "true" ]]; then
-        otherargs="--Xdebug ${otherargs}"
-    fi
+#    if [[ "${Xdebug}" == "true" ]]; then
+#       otherargs="--Xdebug ${otherargs}"
+#   fi
     if [[ "${Xdev}" == "true" ]]; then
-        opts="${opts} --mount type=bind,src=${taskdir}/src/bin,dst=/usr/local/bin"
-        otherargs="--Xdev ${otherargs}"
+        opts="${opts} --mount type=bind,src=${taskdir}/src,dst=/usr/local/selby"
+#       otherargs="--Xdev ${otherargs}"
     fi
 
     local cmd="docker run ${opts} ${Ximage} ${Xdockercmd} ${otherargs}"

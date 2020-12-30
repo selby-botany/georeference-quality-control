@@ -26,16 +26,17 @@ RUN apt-get update && \
              jq \
              perl \
              tini  && \
-    mkdir -p /var/log/selby \
+    mkdir -p /usr/local/selby \
+             /var/log/selby \
              /var/cache/selby/gqc \
              /var/data/selby/gqc
 
 # Install our stuff
-COPY src/bin/gqc /usr/local/bin/gqc
+COPY src/* /usr/local/selby/
 
 # Expose these directories as mount points
-VOLUME ["/var/log/selby", "/var/cache/selby", "/var/data/selby"]
+VOLUME ["/usr/local/selby", "/var/cache/selby", "/var/data/selby", "/var/log/selby"]
 
 # Add Tini
 ENTRYPOINT ["/bin/tini", "--"]
-CMD ["/usr/local/bin/gqc"]
+CMD ["/usr/local/selby/bin/gqc"]
