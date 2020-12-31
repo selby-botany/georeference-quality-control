@@ -21,19 +21,21 @@ GQC_DEV=$(echo "${GQC_DEV}" | tr A-Z a-z)
 
 # Script configuration is held in this hash table
 declare -A GQC
+GQC[COMMENT_CHARACTER]=${GQC_COMMENT_CHARACTER:-'#'}
 GQC[DEBUG]=${GQC_DEBUG}
 GQC[DEV]=${GQC_DEV}
-GQC[INPUT]=${GQC[INPUT]:-/dev/stdin}
-GQC[OUTPUT]=${GQC[OUTPUT]:-/dev/stdout}
-GQC[QUIET]=${GQC[QUIET]:-false}
+GQC[FIRST_LINE_IS_DATA]=${GQC_FIRST_LINE_IS_DATA:-false}
+GQC[INPUT]=${GQC_INPUT:-/dev/stdin}
+GQC[OUTPUT]=${GQC_OUTPUT:-/dev/stdout}
+GQC[QUIET]=${GQC_QUIET:-false}
 GQC[SEPARATOR]=${GQC[SEPARATOR]:-','}
 # 5 digits is ~1 meter resolution
 # 4 digits is ~10 meter resolution
 # 3 digits is ~100 meter resolution
 # 2 digits is ~1 kilometer resolution
 # 1 digits is ~10 kilometer resolution
-GQC[LATITUDE_PRECISION]=${GQC[LATITUDE_PRECISION]:-3}
-GQC[LONGITUDE_PRECISION]=${GQC[LONGITUDE_PRECISION]:-3}
+GQC[LATITUDE_PRECISION]=${GQC_LATITUDE_PRECISION:-3}
+GQC[LONGITUDE_PRECISION]=${GQC_LONGITUDE_PRECISION:-3}
 
 declare -A LOCATIONIQ
 LOCATIONIQ[API_TOKEN]=${LOCATIONIQ_API_TOKEN:-"locationq-api-token"}
@@ -372,8 +374,16 @@ function gqc.get-options() {
             [[ -e "${file}" ]] && (! [[ -w "${file}" ]]) ||  (log.fatal "log file can not be written: '${file}'" 1>&2; exit 1)
             GQC[CACHEDIR]="${file}"
             ;;
+        --comment-character)
+            GQC[COMMENT_CHARACTER]==$(echo "${2}") && shift
+            ([[ ${#GQC[COMMENT_CHARACTER]} -eq 0 ]] || [[ ${#GQC[COMMENT_CHARACTER]} -eq 1 ]]) || 
+                (log.fatal "illegal comment character '${GQC[COMMENT_CHARACTER]}': expecting one character")
+            ;;
         --copyright)
             gqc.copyright; exit 0
+            ;;
+        --first-line-is-data)
+>           GQC[FIRST_LINE_IS_DATA]=true
             ;;
         -H|--help)
             gqc.usage; exit 0
@@ -439,13 +449,14 @@ function gqc.get-options() {
 function gqc.main() {
     gqc.initialize "$@"
     gqc.get-options "$@"
-    
     log.debug "GQC[PRG]=${GQC[PRG]}"
     log.debug "GQC[TASK]=${GQC[TASK]}"
     log.debug "GQC[TASKDIR]=${GQC[TASKDIR]}"
     log.debug "GQC[COMMAND]=${GQC[COMMAND]}"
     log.debug "GQC[REQUESTID]=${GQC[REQUESTID]}"
     log.debug "GQC[CACHEDIR]=${GQC[CACHEDIR]}"
+    log.debug "GQC[COMMENT_CHARACTER]=${GQC[COMMENT_CHARACTER]}"
+    log.debug "GQC[FIRST_LINE_IS_DATA]=${GQC[FIRST_LINE_IS_DATA]}"
     log.debug "GQC[INPUT]=${GQC[INPUT]}"
     log.debug "GQC[LATITUDE_PRECISION]=${GQC[LATITUDE_PRECISION]}"
     log.debug "GQC[LONGITUDE_PRECISION]=${GQC[LONGITUDE_PRECISION]}"
@@ -463,7 +474,12 @@ function gqc.main() {
     local OLDIFS="${IFS}"
     IFS="${GQC[SEPARATOR]}"
     local country state selbyNumber latitude longitude
-    cat "${GQC[INPUT]}" | tail -n +2 | text.trim | while read country state selbyNumber latitude longitude ; do
+    
+    local tail=tail -n +2
+    ${GQC[FIRST_LINE_IS_DATA] && tail=cat
+    local comments=sed \'"/^[[:blank:]]*${GQC[COMMENT_CHARACTER]}/d;s/${GQC[COMMENT_CHARACTER]}.*//"\'
+    [[ -z "${#GQC[COMMENT_CHARACTER]}" ]] && comments=cat
+    cat "${GQC[INPUT]}" | $tail | $comments | text.trim | while read country state selbyNumber latitude longitude ; do
         log.debug "raw-record: country='${country}' state='${state}' selbyNumber='${selbyNumber}' latitude='${latitude}' longitude='${longitude}'"
         (echo "${country}" | text.trim | grep -q '^#') && continue # Skip comment lines
         local c_country=$(text.canonicalize "${country}")
@@ -530,6 +546,15 @@ Output is to stdout unless the --output option is given.
 
       --api-token              LocationIQ API token
   -C, --cache-directory d      Cache directory; defaults to /var/cache/selby/gqc
+      --comment-character c    All input starting at a comment character until
+                               the end of line is ignored. The default comment
+                               character is '#'. Use '--comment-character C' to
+                               change the comment character to 'C' and
+                               '--comment-character' (without a value) to disable
+                               comments
+      --first-line-is-data     The first line of input should be treated as data.
+                               By default the first line is treated as a column
+                               label heading and skipped
       --copyright              Display the copyright and exit
   -H, --help                   Display this help and exit
       --latitude-precision p   Number of fractional digits of precision in latitude; defaults to 3
