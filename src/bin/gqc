@@ -200,7 +200,7 @@ function locationiq.reverse-geolocate() {
     log.debug "Reverse Geolocate: country=${c_country} div1=${c_state} lat=${latitude} long=${longitude} url=${url}" > /dev/null
     result=$(curl --silent --get "${url}")
     local error=$(echo "${result}" | jq .error)
-    [[ -n "${error}" ]] && [[ "${error}" != "null" ]] && (log.error "Reverse geolocate request error: url='${url}' error='${error}'" 1>&2; exit 1)
+    [[ -n "${error}" ]] && [[ "${error}" != "null" ]] && (log.fatal "Reverse geolocate request error: url='${url}' error='${error}'")
     echo "${result}"
 }
 
@@ -231,13 +231,13 @@ function log.dryrun() {
 function log.error() {
     if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
         log.log "[ERROR] $line"
-    done
+    done 1>&2
 }
 
 function log.fatal() {
     if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
-        log.log "[FATAL] $line"
-    done
+        log.log "[FATAL] $line" >
+    done 1>&2
 }
 
 function log.info() {
@@ -310,7 +310,7 @@ function util.readlink_e() {
 
 function gqc.initialize() {
     local prg=$(readlink -e "$0")
-    ([[ -n "${prg}" ]] && [[ -f "${prg}" ]]) || (echo "Cannot locate: '$0'" 1>&2; exit 1)
+    ([[ -n "${prg}" ]] && [[ -f "${prg}" ]]) || (echo "[FATAL] Cannot locate: '$0'" 1>&2; gqc.exit_1)
     local task=$(basename -- "$0")
     local taskdir=$(cd $(dirname -- "$0") > /dev/null && pwd)
     local tmpdir="${TMPDIR:-/tmp}"
@@ -358,6 +358,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 END_OF_COPYRIGHT
 }
 
+function gqc.exit_0 () {
+    kill -USR1 $GQC_PID
+    exit 0
+}
+
+function gqc.exit_1 () {
+    kill -USR2 $GQC_PID
+    exit 1
+}
+
 function gqc.get-options() {
     if ! options=$(getopt -n "${GQC[TASK]}" -o 'C:Hi:L:l:o:qs:' -l 'api-token:,cache-directory:,copyright,help,input:,latitude-precision:,log-file:,log-level:,longitude-precision:,output:,quiet,separator:,start-record:,Xdebug,Xdev' -- "$@"); then
         # something went wrong, getopt will put out an error message for us
@@ -371,7 +381,7 @@ function gqc.get-options() {
             ;;
         -C|--cache-directory)
             local file="${2}" && shift
-            [[ -e "${file}" ]] && (! [[ -w "${file}" ]]) ||  (log.fatal "log file can not be written: '${file}'" 1>&2; exit 1)
+            [[ -e "${file}" ]] && (! [[ -w "${file}" ]]) ||  (log.fatal "log file can not be written: '${file}'")
             GQC[CACHEDIR]="${file}"
             ;;
         --comment-character)
@@ -390,40 +400,40 @@ function gqc.get-options() {
             ;;
         -i|--input)
             GQC[INPUT]="${2}" && shift
-            [[ -r "${GQC[INPUT]}" ]] || (log.fatal "file can not be read: '${GQC[INPUT]}'" 1>&2; exit 1)
+            [[ -r "${GQC[INPUT]}" ]] || (log.fatal "file can not be read: '${GQC[INPUT]}'")
             ;;
         --latitude-precision)
             local p="${2}" && shift
-            (echo "${p}" | grep -E -q '^\d+$') || (log.fatal "invalid latitude-precision: expecting positive integer - '${p}'" 1>&2; exit 1)
+            (echo "${p}" | grep -E -q '^\d+$') || (log.fatal "invalid latitude-precision: expecting positive integer - '${p}'")
             GQC[LATITUDE_PRECISION]=${p}
             ;;
         -L|--log-file)
             local file="${2}" && shift
-            [[ -e "${file}" ]] || (touch -- "${file}" || log.fatal "log file can not be written: '${file}'" 1>&2; exit 1)
-            [[ -w "${file}" ]] || (chmod +w -- "${file}" || log.fatal "log file can not be written: '${file}'" 1>&2; exit 1)
+            [[ -e "${file}" ]] || (touch -- "${file}" || log.fatal "log file can not be written: '${file}'")
+            [[ -w "${file}" ]] || (chmod +w -- "${file}" || log.fatal "log file can not be written: '${file}'")
             LOG[LOGFILE]="${file}"
             ;;
         -l|--log-level)
             local level="${2}" && shift
             local l=${level^^}
-            (echo "${l}" | grep -E -q '^(DEBUG|ERROR|INFO|QUIET|WARN)$') || (log.fatal "invalid log level: expecting on of DEBUG, ERROR, INFO, QUIET or WARN - '${level}'" 1>&2; exit 1)
+            (echo "${l}" | grep -E -q '^(DEBUG|ERROR|INFO|QUIET|WARN)$') || (log.fatal "invalid log level: expecting on of DEBUG, ERROR, INFO, QUIET or WARN - '${level}'")
             LOG[LOGLEVEL]="${LOG[${l}]}"
             ;;
         --longitude-precision)
             local p="${2}" && shift
-            (echo "${p}" | grep -E -q '^\d+$') || (log.fatal "invalid latitude-precision: expecting positive integer - '${p}'" 1>&2; exit 1)
+            (echo "${p}" | grep -E -q '^\d+$') || (log.fatal "invalid latitude-precision: expecting positive integer - '${p}'")
             GQC[LONGITUDE_PRECISION]=${p}
             ;;
         -o|--output)
             GQC[OUTPUT]="${2}" && shift
-            [[ -w "${GQC[OUTPUT]}" ]] || (log.fatal "file can not be written: '${GQC[OUTPUT]}'" 1>&2; exit 1)
+            [[ -w "${GQC[OUTPUT]}" ]] || (log.fatal "file can not be written: '${GQC[OUTPUT]}'")
             ;;
         -q|--quiet)
             GQC[QUIET]=true
             ;;
         -s|--separator)
             GQC[SEPARATOR]=$(echo "${2}") && shift
-            [[ ${#GQC[SEPARATOR]} -eq 1 ]] || (log.fatal "illegal separator '${GQC[SEPARATOR]}': expecting one character" 1>&2; exit 1)
+            [[ ${#GQC[SEPARATOR]} -eq 1 ]] || (log.fatal "illegal separator '${GQC[SEPARATOR]}': expecting one character")
             ;;
         --Xdebug)
             set -xv
@@ -436,7 +446,7 @@ function gqc.get-options() {
             ;;
         (--) shift; break
             ;;
-        (-*) log.fatal "unrecognized option ${1}" 1>&2; gqc.usage 1>&2; exit 1
+        (-*) log.fatal "unrecognized option ${1}" 1>&2; gqc.usage
             ;;
         (*) break
             ;;
@@ -586,9 +596,11 @@ corresponding to different precisions:
 END_OF_USAGE
 }
 
+trap 'exit 0' USR1
+trap 'exit 1' USR2
 trap 's=$?; exit $s' HUP INT TERM
 (
     gqc.main "$@"
 )
-trap - HUP INT TERM EXIT
+trap - HUP INT TERM EXIT USR1 USR2
 exit 0
