@@ -23,11 +23,13 @@ prg=${BASH_SOURCE[0]}
 task=$(basename -- "$0")
 taskdir=$(cd $(dirname -- "$0")/.. > /dev/null && pwd)
 
+
 function gqcw.get_ini() {
     local var=${1:?Need variable}
+    local default=${1:-}
 
-    local inifiles=("/usr/local/selby/include/gqc.init" "${HOME}/.gqc" "${taskdir}/gqc.init")
-    local retval=
+    local inifiles=("/usr/local/selby/include/gqc.init" "${taskdir}/gqc.init""${HOME}/.gqc")
+    local retval=${default}
     for inifile in "${inifiles[@]}"; do
         if [[ -r "${inifile}" ]]; then
             val=$(cat "${inifile}" | grep --text --extended-regexp -- "^${var}=" | tail -n 1 | cut -d= -f2- | sed "s/^\([\"']\)\(.*\)\1\$/\2/g")
@@ -127,9 +129,9 @@ function gqcw.main() {
     fi
 
     local exports=
-    local host=$(gqcw.get_ini LOCATIONIQ_API_HOST)
+    local host=$(gqcw.get_ini LOCATIONIQ_API_HOST, "us1.locationiq.com")
     [[ -n "${host}" ]] && exports="${exports} --env LOCATIONIQ_API_TOKEN=${host}"
-    local token=$(gqcw.get_ini LOCATIONIQ_API_TOKEN)
+    local token=$(gqcw.get_ini LOCATIONIQ_API_TOKEN, "users-loctionq-private API-key")
     [[ -n "${token}" ]] && exports="${exports} --env LOCATIONIQ_API_TOKEN=${token}"
 
     local opts="--interactive --rm --name "${Xcontainer}" ${Xdockerargs} --env GQC_DEBUG=${GQC_DEBUG} --env GQC_DEV=${GQC_DEV} ${exports} --sig-proxy --stop-signal SIGTERM"

@@ -68,6 +68,15 @@ utility. A wrapper script is provided that invokes `docker` with all the usual o
 3. Download a copy of the utility: `git clone git@github.com:selby-botany/georeference-quality-control.git`
 4. Run it. Example: `bin/gqc --help` or `cat data/gqc-ecuador.csv | bin/gqc`
 
+### Configuration
+
+Create a `.gqc` file in your `HOME` directory with this text, replacing the
+`LOCATIONIQ_API_TOKEN` value to your private key.
+
+    # HOME/.gqc -- Selby Botany Geolocation Quality Control configuration
+    # Access key gqc-selby
+    LOCATIONIQ_API_TOKEN="replace-me-with-your-private-LocationIQ-api-key"
+
 ## Usage
 
     Usage: gqc [OPTION]...
@@ -98,7 +107,7 @@ utility. A wrapper script is provided that invokes `docker` with all the usual o
           --Xdockercmd cmd         Container command to invoke on docker invocation
           --Xdryrun                Display the docker command to be run and exit
           --Xmount                 Additional docker mount specification (implies --Xdev)
-
+    
     The --latitude-precision and --longitude-precision values specify the precision of
     the location's coordinates, and hence specify the "resolution" of the location; i.e. how
     many fractional decimal digits are used to identify a geolocation. More digits means a finer
