@@ -59,7 +59,7 @@ function gqcw.get_ini() {
     local var=${1:?Need variable}
     local default=${1:-}
 
-    local inifiles=("/usr/local/selby/include/gqc.init" "${taskdir}/gqc.init""${HOME}/.gqc")
+    local inifiles=("${HOME}/.gqc" "/usr/local/selby/include/gqc.init" "${taskdir}/gqc.init")
     local retval=${default}
     for inifile in "${inifiles[@]}"; do
         if [[ -r "${inifile}" ]]; then
@@ -76,7 +76,7 @@ function gqcw.main() {
     local logfile=
     local Xdebug=${GQC_DEBUG}
     local Xdockerargs=
-    local Xdockercmd=
+    local Xdockercmd="/usr/local/selby/bin/gqc"
     local Xdev=${GQC_DEV}
     local Xdryrun=false
     local Ximage=selbybotany/gqc:$(cd "${taskdir}" && git branch --show-current)
@@ -160,9 +160,9 @@ function gqcw.main() {
     fi
 
     local exports=
-    local host=$(gqcw.get_ini LOCATIONIQ_API_HOST, "us1.locationiq.com")
-    [[ -n "${host}" ]] && exports="${exports} --env LOCATIONIQ_API_TOKEN=${host}"
-    local token=$(gqcw.get_ini LOCATIONIQ_API_TOKEN, "users-loctionq-private API-key")
+    local host=$(gqcw.get_ini LOCATIONIQ_API_HOST)
+    [[ -n "${host}" ]] && exports="${exports} --env LOCATIONIQ_API_HOST=${host}"
+    local token=$(gqcw.get_ini LOCATIONIQ_API_TOKEN)
     [[ -n "${token}" ]] && exports="${exports} --env LOCATIONIQ_API_TOKEN=${token}"
 
     local opts="--interactive --rm --name "${Xcontainer}" ${Xdockerargs} --env GQC_DEBUG=${GQC_DEBUG} --env GQC_DEV=${GQC_DEV} ${exports} --sig-proxy --stop-signal SIGTERM"

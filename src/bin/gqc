@@ -21,7 +21,6 @@ GQC_DEV=$(echo "${GQC_DEV}" | tr A-Z a-z)
 
 # Script configuration is held in this hash table
 declare -A GQC
-GQC[COMMENT_CHARACTER]=${GQC_COMMENT_CHARACTER:-'#'}
 GQC[DEBUG]=${GQC_DEBUG}
 GQC[DEV]=${GQC_DEV}
 GQC[FIRST_LINE_IS_DATA]=${GQC_FIRST_LINE_IS_DATA:-false}
@@ -38,8 +37,8 @@ GQC[LATITUDE_PRECISION]=${GQC_LATITUDE_PRECISION:-3}
 GQC[LONGITUDE_PRECISION]=${GQC_LONGITUDE_PRECISION:-3}
 
 declare -A LOCATIONIQ
-LOCATIONIQ[API_TOKEN]=${LOCATIONIQ_API_TOKEN:-"locationq-api-token"}
-LOCATIONIQ[API_HOST]=${LOCATIONIQ_API_HOST:-"us1.locationiq.com"}
+LOCATIONIQ[API_TOKEN]=${LOCATIONIQ_API_TOKEN:-}
+LOCATIONIQ[API_HOST]=${LOCATIONIQ_API_HOST:-}
 
 declare -A LOG
 LOG[DEBUG]=5
@@ -236,7 +235,7 @@ function log.error() {
 
 function log.fatal() {
     if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
-        log.log "[FATAL] $line" >
+        log.log "[FATAL] $line"
     done 1>&2
 }
 
@@ -369,7 +368,7 @@ function gqc.exit_1 () {
 }
 
 function gqc.get-options() {
-    if ! options=$(getopt -n "${GQC[TASK]}" -o 'C:Hi:L:l:o:qs:' -l 'api-token:,cache-directory:,copyright,help,input:,latitude-precision:,log-file:,log-level:,longitude-precision:,output:,quiet,separator:,start-record:,Xdebug,Xdev' -- "$@"); then
+    if ! options=$(getopt -n "${GQC[TASK]}" -o 'C:Hi:L:l:o:qs:' -l 'api-token:,cache-directory:,copyright,first-line-is-data,help,input:,latitude-precision:,log-file:,log-level:,longitude-precision:,output:,quiet,separator:,start-record:,Xdebug,Xdev' -- "$@"); then
         # something went wrong, getopt will put out an error message for us
         echo 1>&2; gqc.usage 1>&2; exit 1
     fi
@@ -384,16 +383,11 @@ function gqc.get-options() {
             [[ -e "${file}" ]] && (! [[ -w "${file}" ]]) ||  (log.fatal "log file can not be written: '${file}'")
             GQC[CACHEDIR]="${file}"
             ;;
-        --comment-character)
-            GQC[COMMENT_CHARACTER]==$(echo "${2}") && shift
-            ([[ ${#GQC[COMMENT_CHARACTER]} -eq 0 ]] || [[ ${#GQC[COMMENT_CHARACTER]} -eq 1 ]]) || 
-                (log.fatal "illegal comment character '${GQC[COMMENT_CHARACTER]}': expecting one character")
-            ;;
         --copyright)
             gqc.copyright; exit 0
             ;;
         --first-line-is-data)
->           GQC[FIRST_LINE_IS_DATA]=true
+            GQC[FIRST_LINE_IS_DATA]=true
             ;;
         -H|--help)
             gqc.usage; exit 0
@@ -457,15 +451,16 @@ function gqc.get-options() {
 }
 
 function gqc.main() {
+    echo "gqc.main: $@"
     gqc.initialize "$@"
     gqc.get-options "$@"
+    log.debug "gqc.main: $@"
     log.debug "GQC[PRG]=${GQC[PRG]}"
     log.debug "GQC[TASK]=${GQC[TASK]}"
     log.debug "GQC[TASKDIR]=${GQC[TASKDIR]}"
     log.debug "GQC[COMMAND]=${GQC[COMMAND]}"
     log.debug "GQC[REQUESTID]=${GQC[REQUESTID]}"
     log.debug "GQC[CACHEDIR]=${GQC[CACHEDIR]}"
-    log.debug "GQC[COMMENT_CHARACTER]=${GQC[COMMENT_CHARACTER]}"
     log.debug "GQC[FIRST_LINE_IS_DATA]=${GQC[FIRST_LINE_IS_DATA]}"
     log.debug "GQC[INPUT]=${GQC[INPUT]}"
     log.debug "GQC[LATITUDE_PRECISION]=${GQC[LATITUDE_PRECISION]}"
@@ -485,21 +480,17 @@ function gqc.main() {
     IFS="${GQC[SEPARATOR]}"
     local country state selbyNumber latitude longitude
     
-    local tail=tail -n +2
-    ${GQC[FIRST_LINE_IS_DATA] && tail=cat
-    local comments=sed \'"/^[[:blank:]]*${GQC[COMMENT_CHARACTER]}/d;s/${GQC[COMMENT_CHARACTER]}.*//"\'
-    [[ -z "${#GQC[COMMENT_CHARACTER]}" ]] && comments=cat
-    cat "${GQC[INPUT]}" | $tail | $comments | text.trim | while read country state selbyNumber latitude longitude ; do
+    cat "${GQC[INPUT]}" | text.trim | while read country state selbyNumber latitude longitude ; do
         log.debug "raw-record: country='${country}' state='${state}' selbyNumber='${selbyNumber}' latitude='${latitude}' longitude='${longitude}'"
+
         (echo "${country}" | text.trim | grep -q '^#') && continue # Skip comment lines
         local c_country=$(text.canonicalize "${country}")
         local c_state=$(text.canonicalize "${state}")
         local c_latitude=$(gqc.clean-latitude "${latitude}")
         local c_longitude=$(gqc.clean-latitude "${longitude}")
         log.debug "cleaned: c_country='${c_country}' c_state='${c_state}' selbyNumber='${selbyNumber}' c_latitude='${c_latitude}' c_longitude='${c_longitude}'"
-        local response=$(gqc.reverse-geolocate ${latitude} ${longitude})
-        local url=$(locationiq.reverse-geolocate-url "${latitude}" "${longitude}")
-        log.debug "[lat=${latitude}, lon=${longitude}] => ${response}"
+        local response=$(gqc.reverse-geolocate ${c_latitude} ${c_longitude})
+        log.debug "[lat=${c_latitude}, lon=${c_longitude}] => ${response}"
         local r_country=$(echo "${response}" | jq .address.country | tr -d '"')
         local r_country_code=$(echo "${response}" | jq .address.country_code | tr -d '"')
         local r_state=$(echo "${response}" | jq .address.state | tr -d '"')
@@ -513,7 +504,7 @@ function gqc.main() {
         local c_r_county=$(text.canonicalize "${r_county}")
         local c_r_city=$(text.canonicalize "${r_city}")
         local c_r_region=$(text.canonicalize "${r_region}")
-    
+
         log.info "Reverse geoCode: {sn=$selbyNumber, country=\"$country\", div1=\"${state}\", lat=$latitude, lon=$longitude} => {country=\"$r_country\", state=\"$r_state\", response=${response}}}"
         if [[ "${c_r_country}" != "${c_country}" ]]; then
             log.error "SN-${selbyNumber}: country '${country}' != reverse geocode '${r_country}'" 1>&2
@@ -557,11 +548,6 @@ Output is to stdout unless the --output option is given.
       --api-token              LocationIQ API token
   -C, --cache-directory d      Cache directory; defaults to /var/cache/selby/gqc
       --comment-character c    All input starting at a comment character until
-                               the end of line is ignored. The default comment
-                               character is '#'. Use '--comment-character C' to
-                               change the comment character to 'C' and
-                               '--comment-character' (without a value) to disable
-                               comments
       --first-line-is-data     The first line of input should be treated as data.
                                By default the first line is treated as a column
                                label heading and skipped
