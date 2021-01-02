@@ -271,11 +271,15 @@ function log.warn() {
 
 function text.canonicalize() {
     if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | \
-        text.clean | \
-        tr -d '[:space:]' | \
-        tr -d '[:punct:]' | \
-        tr -d '[:cntrl:]' | \
-        tr 'A-Z' 'a-z'
+        perl -MUnicode::Normalize -lane '# \
+            use open qw(:std :utf8);
+            my $s = NFKD(qq($_));
+            $s =~ s/[^a-zA-Z0-9,\s]//g;
+            $s = lc($s);
+            $s =~ s/^[[:space:]]+|[[:space:]]$//g;
+            $s =~ s/[[:space:]]+/ /g;
+            print qq($s);
+       '
 }
 
 function text.clean() {
