@@ -42,8 +42,8 @@ utility. A wrapper script is provided that invokes `docker` with all the usual o
 
 ### Dependencies
 
-1. [Docker Desktop](https://www.docker.com/); **required**.
-2. [bash shell](https://www.gnu.org/software/bash/) version 4 or later; *optional*.
+1. [Docker Desktop](https://www.docker.com/)
+2. [bash shell](https://www.gnu.org/software/bash/) version 4 or later
 
 ### Install on Linux
 
@@ -82,31 +82,44 @@ Create a `.gqc` file in your `HOME` directory with this text, replacing the
     Usage: gqc [OPTION]...
     
     Performs a georeferencing quality control check. The input file is in
-    CSV (comma separated values) format (see below), but a different field
-    separator can be specified with the --separator option.
+    CSV (comma separated values), but a different field separater can be
+    specified with the --separator option.
     
     Input is read from stdin unless the --input option is given.
     
     Output is to stdout unless the --output option is given.
     
           --api-token              LocationIQ API token
-      -C, --cache-directory d      Cache directory; defaults to HOME/cache/selby/gqc
-          --copyright              Display copyright and exit
+          --api-host               LocationIQ API endpoint hostname
+      -C, --cache-directory d      Cache directory; defaults to /var/cache/selby/gqc
+          --comment-character c    All input starting at a comment character until
+          --first-line-is-data     The first line of input should be treated as data.
+                                   By default the first line is treated as a column
+                                   label heading and skipped
+          --copyright              Display the copyright and exit
       -H, --help                   Display this help and exit
-          --latitude-precision p   Number of fractional digits of precision in latitude;
-                                   defaults to 3
-      -L, --log-file               The log file; defaults to HOME/log/gqc.log
+          --latitude-precision p   Number of fractional digits of precision in latitude; defaults to 3
+      -L, --log-file               The log file; defaults to /var/log/selby/gqc.log
       -l, --log-level              Sets the lowest severity level of log messages to show;
-                                   one of DEBUG, INFO, WARN, ERROR, or QUIET; defaults to INFO
-          --longitude-precision p  Number of fractional digits of precision in longitude;
-                                   defaults to 3
+                                   one of DEBUG, INFO, WARN, ERROR, or QUIET; defaults to FATAL
+          --longitude-precision p  Number of fractional digits of precision in longitude; defaults to 3
+      -q, --quiet                  Don't display any messages
       -s, --separator s            Field separator; defaults to ","
+          --Xcontainer-name name   Override the docker container name
           --Xdebug                 Enable execution tracing
-          --Xdev                   Enable developer mode
+          --Xdev                   Enable developer mode; mounts  and 
           --Xdockerargs args       String of arguments to add to docker invocation.
           --Xdockercmd cmd         Container command to invoke on docker invocation
           --Xdryrun                Display the docker command to be run and exit
+          --Ximage                 Sets the docker image and container names
           --Xmount                 Additional docker mount specification (implies --Xdev)
+    
+    
+    The --api-token and --api-host options get their default values from
+    configuration variables, LOCATIONIQ_API_HOST and LOCATIONIQ_API_TOKEN,
+    respectively. Configuration variable are searched for in ~/.gqc,
+    /usr/local/selby/config/gqc.init, and INSTALLDIR/src/config/gqc.ini, in that
+    order. See INSTALLDIR/src/config/gqc.ini as an example.
     
     The --latitude-precision and --longitude-precision values specify the precision of
     the location's coordinates, and hence specify the "resolution" of the location; i.e. how
@@ -114,12 +127,16 @@ Create a `.gqc` file in your `HOME` directory with this text, replacing the
     resolution. Coordinates that are equal, after rounding to the specified number of fractional
     digits, are considered to be the same location. Near the equator the approximate resolution
     corresponding to different precisions:
-    
+        
         5 digits is ~1 meter resolution
         4 digits is ~10 meter resolution
         3 digits is ~100 meter resolution
         2 digits is ~1 kilometer resolution
-        1 digits is ~10 kilometer resolution 
+        1 digits is ~10 kilometer resolution
+    
+    
+    All options starting with -X are for testing only. Only use them if you know what
+    you are doing.
 
 ## Data Formats
 

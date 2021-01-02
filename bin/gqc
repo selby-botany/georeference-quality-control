@@ -165,7 +165,14 @@ function gqcw.main() {
     local token=$(gqcw.get_ini LOCATIONIQ_API_TOKEN)
     [[ -n "${token}" ]] && exports="${exports} --env LOCATIONIQ_API_TOKEN=${token}"
 
-    local opts="--interactive --rm --name "${Xcontainer}" ${Xdockerargs} --env GQC_DEBUG=${GQC_DEBUG} --env GQC_DEV=${GQC_DEV} ${exports} --sig-proxy --stop-signal SIGTERM"
+    local opts="--interactive --rm"
+    [[ -n "${Xcontainer}" ]] && opts="${opts} --name ${Xcontainer}"
+    opts="${opts} --env GQC_DEBUG=${GQC_DEBUG}"
+    opts="${opts} --env GQC_DEV=${GQC_DEV}"
+    [[ -n "${Xdockerargs}" ]] && opts="${opts} ${Xdockerargs}"
+    [[ -n "${exports}" ]] && opts="${opts} ${exports}"
+    opts="${opts} --sig-proxy"
+    opts="${opts} --stop-signal SIGTERM"
     opts="${opts} --mount type=bind,src=${cachedir},dst=/var/cache/selby"
     if [[ -n "${logfile}" ]]; then
         local dir=$(cd $(dirname -- "${logfile}") > /dev/null && pwd)
@@ -183,7 +190,7 @@ function gqcw.main() {
    fi
     if [[ "${Xdev}" == "true" ]]; then
         opts="${opts} --mount type=bind,src=${taskdir}/src,dst=/usr/local/selby"
-       otherargs="--Xdev ${otherargs}"
+        otherargs="--Xdev ${otherargs}"
     fi
 
     local cmd="docker run ${opts} ${Ximage} ${Xdockercmd} ${otherargs}"
