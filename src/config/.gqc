@@ -1,0 +1,8 @@
+## Default GQC Configuraion
+
+# Access key DEFAULT value
+# LOCATIONIQ_API_TOKEN="pk.especiallylongstringofcharacters"
+LOCATIONIQ_API_TOKEN=
+
+# Host to call DEFAULT value
+LOCATIONIQ_API_HOST="us1.locationiq.com"

@@ -457,7 +457,7 @@ function gqc.get-options() {
 }
 
 function gqc.main() {
-    echo "gqc.main: $@"
+    [[ "${GQC_DEBUG}" == 'true' ]] && echo "gqc.main: $@"
     gqc.initialize "$@"
     gqc.get-options "$@"
     log.debug "gqc.main: $@"
@@ -566,13 +566,22 @@ Output is to stdout unless the --output option is given.
       --longitude-precision p  Number of fractional digits of precision in longitude; defaults to 3
   -q, --quiet                  Don't display any messages
   -s, --separator s            Field separator; defaults to ","
+      --Xcontainer-name name   Override the docker container name
       --Xdebug                 Enable execution tracing
       --Xdev                   Enable developer mode; mounts `src` and `data`
       --Xdockerargs args       String of arguments to add to docker invocation.
       --Xdockercmd cmd         Container command to invoke on docker invocation
       --Xdryrun                Display the docker command to be run and exit
+      --Ximage                 Sets the docker image and container names
       --Xmount                 Additional docker mount specification (implies --Xdev)
-  
+
+
+The --api-token and --api-host options get their default values from
+configuration variables, LOCATIONIQ_API_HOST and LOCATIONIQ_API_TOKEN,
+respectively. Configuration variable are searched for in ~/.gqc,
+/usr/local/selby/config/gqc.init, and INSTALLDIR/src/config/gqc.ini, in that
+order. See INSTALLDIR/src/config/gqc.ini as an example.
+
 The --latitude-precision and --longitude-precision values specify the precision of
 the location's coordinates, and hence specify the "resolution" of the location; i.e. how
 many fractional decimal digits are used to identify a geolocation. More digits means a finer
@@ -586,6 +595,9 @@ corresponding to different precisions:
     2 digits is ~1 kilometer resolution
     1 digits is ~10 kilometer resolution
 
+
+All options starting with -X are for testing only. Only use them if you know what
+you are doing.
 END_OF_USAGE
 }
 
