@@ -178,12 +178,12 @@ function gqcw.main() {
     if [[ -n "${Xmount}" ]]; then
         opts="${opts} ${Xmount}"
     fi
-#    if [[ "${Xdebug}" == "true" ]]; then
-#       otherargs="--Xdebug ${otherargs}"
-#   fi
+    if [[ "${Xdebug}" == "true" ]]; then
+       otherargs="--Xdebug ${otherargs}"
+   fi
     if [[ "${Xdev}" == "true" ]]; then
         opts="${opts} --mount type=bind,src=${taskdir}/src,dst=/usr/local/selby"
-#       otherargs="--Xdev ${otherargs}"
+       otherargs="--Xdev ${otherargs}"
     fi
 
     local cmd="docker run ${opts} ${Ximage} ${Xdockercmd} ${otherargs}"
