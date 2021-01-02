@@ -157,8 +157,7 @@ function cache.get-with-default() {
 
 function cache.key-to-id() {
     local key=${1:?Need key}
-    echo "${key}" | hash.sha1 | awk '{ print $1 }'
-    true
+    echo "${key}"
 }
 
 function cache.put() {
