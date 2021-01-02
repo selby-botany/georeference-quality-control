@@ -371,13 +371,16 @@ function gqc.exit_1 () {
 }
 
 function gqc.get-options() {
-    if ! options=$(getopt -n "${GQC[TASK]}" -o 'C:Hi:L:l:o:qs:' -l 'api-token:,cache-directory:,copyright,first-line-is-data,help,input:,latitude-precision:,log-file:,log-level:,longitude-precision:,output:,quiet,separator:,start-record:,Xdebug,Xdev' -- "$@"); then
+    if ! options=$(getopt -n "${GQC[TASK]}" -o 'C:Hi:L:l:o:qs:' -l 'api-host:,api-token:,cache-directory:,copyright,first-line-is-data,help,input:,latitude-precision:,log-file:,log-level:,longitude-precision:,output:,quiet,separator:,start-record:,Xdebug,Xdev' -- "$@"); then
         # something went wrong, getopt will put out an error message for us
         echo 1>&2; gqc.usage 1>&2; exit 1
     fi
     eval set -- "${options}"
     while [[ "${#}" -gt "0" ]]; do
         case ${1} in
+        --api-host)
+            LOCATIONIQ[API_HOST]=$(echo "${2}") && shift
+            ;;
         --api-token)
             LOCATIONIQ[API_TOKEN]=$(echo "${2}") && shift
             ;;
@@ -549,6 +552,7 @@ Input is read from stdin unless the --input option is given.
 Output is to stdout unless the --output option is given.
 
       --api-token              LocationIQ API token
+      --api-host               LocationIQ API endpoint hostname
   -C, --cache-directory d      Cache directory; defaults to /var/cache/selby/gqc
       --comment-character c    All input starting at a comment character until
       --first-line-is-data     The first line of input should be treated as data.
