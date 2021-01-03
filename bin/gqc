@@ -24,6 +24,40 @@ task=$(basename -- "$0")
 taskdir=$(cd $(dirname -- "$0")/.. > /dev/null && pwd)
 
 
+function gqcw.build_docker_image() {
+    local repository=${1:?Need repository} && shift
+    local tag=${1:?Need tag} && shift
+    local dryrun=${1:?Need dryrun} && shift
+    local othertags="${@}"
+    local image="${repository}:${tag}"
+    local cmd="docker build --tag ${image} ${othertags} ${taskdir}"
+    if [[ "${dryrun}" == "true" ]]; then
+        gqcw.dryrun "build command: ${cmd}"
+    else 
+        local tmp="${TMPDIR}/${task}-${$}-${RANDOM}"
+        gqcw.info "building image: '${image}' ..."
+        gqcw.debug "build command: ${cmd}"
+        if (! (cd "${taskdir}" && ${cmd} >${tmp} 2>&1)); then
+            gqcw.fatal "image can not be built: '${image}'"
+            cat "${tmp}" | while read line ; do
+                gqcw.debug "${line}'"
+            done
+            gqcw.exit_1
+            ßfalse
+        fi
+    fi
+    gqcw.info "image build complete: '${image}'"
+    gqcw.find_docker_image  "${repository}" "${tag}"
+}
+
+function gqcw.debug () {
+    ([[ "${GQC_DEV}" == 'true' ]] && echo "[DEBUG] ${@}" 1>&2) || true
+}
+
+function gqcw.dryrun () {
+    echo "[DRYRUN] ${@}" 1>&2
+}
+
 function gqcw.exit_0 () {
     kill -USR1 $GQC_PID
     exit 0
@@ -32,14 +66,6 @@ function gqcw.exit_0 () {
 function gqcw.exit_1 () {
     kill -USR1 $GQC_PID
     exit 1
-}
-
-function gqcw.debug () {
-    echo "[DEBUG] ${@}" 1>&2
-}
-
-function gqcw.dryrun () {
-    echo "[DRYRUN] ${@}" 1>&2
 }
 
 function gqcw.fatal () {
@@ -51,8 +77,10 @@ function gqcw.fatal_no_exit () {
     echo "[FATAL] ${@}" 1>&2
 }
 
-function gqcw.info () {
-    echo "[INFO] ${@}" 1>&2
+function gqcw.find_docker_image() {
+    local repository=${1:?Need repository}
+    local tag=${2:?Need tag}
+    [[ -n $(docker images --quiet ${repository}:${tag} | uniq | head --lines 1) ]]
 }
 
 function gqcw.get_ini() {
@@ -70,61 +98,78 @@ function gqcw.get_ini() {
     echo $retval
 }
 
+function gqcw.info () {
+    echo "[INFO] ${@}" 1>&2
+}
+
 function gqcw.main() {
     local cachedir="${taskdir}/cache"
     local logdir=
     local logfile=
-    local Xdebug=${GQC_DEBUG}
-    local Xdockerargs=
-    local Xdockercmd="/usr/local/selby/bin/gqc"
-    local Xdev=${GQC_DEV}
-    local Xdryrun=false
-    local Ximage=selbybotany/gqc:$(cd "${taskdir}" && git branch --show-current)
-    local Xcontainer=$(echo "${Ximage}" | cut -d: -f1 | tr -d '[:space:]' | tr -c '[:alnum:]' '-')
-    local Xmount=
+    local build=true
+    local debug=${GQC_DEBUG}
+    local development_mode=${GQC_DEV}
+    local docker_build_arguments=
+    local docker_run_command="/usr/local/selby/bin/gqc"
+    local dryrun=false
+    local pull=true
+    
+    local repository=selbybotany/gqc
+    local tag=$(cd "${taskdir}" && git branch --show-current)
+    local build_tags=
+    local container_name=$(echo "${repository}" | tr -d '[:space:]' | tr -c '[:alnum:]' '-')
+    local mount=
 
     local otherargs=
     while [[ "${#}" -gt "0" ]]; do
         case ${1} in
-        -C|--cache-directory)
+        --cache-directory|-C)
             local file="${2}" && shift
             ([[ -d "${file}" ]] && [[ -w "${file}" ]]) || (gqcw.fatal "cache directory does not exist or can not be written: '${file}'")
             cachedir="${file}"
             ;;
-        -L|--log-file)
+        --container-name|--name|-n)
+            container_name="${2}" && shift
+            ;;
+        --log-file|-L)
             local file="${2}" && shift
             [[ -e "${file}" ]] || (touch -- "${file}" || gqcw.fatal "log file can not be written: '${file}'")
             [[ -w "${file}" ]] || (gqcw.fatal "log file can not be written: '${file}'")
             logfile="${file}"
             ;;
-        --Xcontainer-name)
-            Xcontainer="${2}" && shift
+        --no-build)
+            build=false
+            ;;
+        --no-pull)
+            pull=false
+            ;;
+        --Xbuild-arguments)
+            docker_build_arguments="${docker_build_arguments} ${2}" && shift
             ;;
         --Xdebug)
             set -xv
-            Xdebug=true
+            debug=true
             GQC_DEBUG=true
             ;;
         --Xdev)
-            Xdev=true
+            development_mode=true
             GQC_DEV=true
             ;;
-        --Xdockerargs)
-            Xdockerargs="${Xdockerargs} ${2}" && shift
-            ;;
-        --Xdockercmd)
-            Xdockercmd="${2}" && shift
-            ;;
         --Xdryrun)
-            Xdryrun=true
+            dryrun=true
             ;;
-        --Ximage)
-            Ximage="${2}" && shift
-            Xcontainer=$(echo "${Ximage}" | cut -d: -f1 | tr -d '[:space:]' | tr -c '[:alnum:]' '-')
+        --Xrepository)
+            docker_repository="${2}" && shit
+            ;;
+        --Xrun-command)
+            docker_run_command="${2}" && shift
+            ;;
+        --Xtag)
+            build_tags="${build_tags} ${2}" && shift
             ;;
         --Xmount)
-            Xmount="${Xmount} --mount ${2}" && shift
-            Xdev=true
+            mount="${mount} --mount ${2}" && shift
+            development_mode=true
             GQC_DEV=true
             ;;
         (*)
@@ -134,29 +179,22 @@ function gqcw.main() {
         shift
     done
 
-    local image=$(docker images | awk '{ printf("%s:%s\n",$1,$2) }' | grep -- "${Ximage}" | head -n 1 | awk '{ print $1 }')
-    if [[ "${Xdev}" != "true" ]] && [[ -z "${image}" ]]; then
-        # First try pulling it
-        cd "${taskdir}"
-        (
-            gqcw.info "pulling image from github: '${Ximage}' ..." &&
-            docker pull "${Ximage}" >/dev/null 2>&1 &&
-            gqcw.info "image pulled from github: '${Ximage}'"
-        ) || gqcw.info "image not found on github: '${Ximage}' ..."
+    local image=${repository}:${tag}
+    local tmp=
+    local t=
+    for t in ${build_tags}; do
+        tmp="${tmp} --tag ${repository}:${t}"
+    done
+    build_tags="${tmp}"
+
+    if (! gqcw.find_docker_image  "${repository}" "${tag}") && [[ "${pull}" == "true" ]]; then
+        gqcw.pull_docker_image "${repository}" "${tag}" || true
     fi
-    local image=$(docker images | awk '{ printf("%s:%s\n",$1,$2) }' | grep -- "${Ximage}" | head -n 1 | awk '{ print $1 }')
-    if [[ -z "${image}" ]]; then
-        cd "${taskdir}"
-        local tmp="${TMPDIR}/${task}-${$}-${RANDOM}"
-        gqcw.info "building image: '${Ximage}' ..."
-        if ! (docker build --tag "${Ximage}" . >${tmp} 2>&1); then
-            gqcw.fatal "image can not be built: '${Ximage}'"
-            cat "${tmp}" | while read line ; do
-                 gqcw.debug "${line}'"
-             done
-             gqcw.exit_1
-         fi
-        gqcw.info "image build complete: '${Ximage}' ..."
+    if (! gqcw.find_docker_image  "${repository}" "${tag}") && [[ "${build}" == "true" ]]; then
+        gqcw.build_docker_image "${repository}" "${tag}" "${dryrun}" "${build_tags}" || true
+    fi
+    if (! gqcw.find_docker_image  "${repository}" "${tag}"); then
+        gqcw.fatal "docker image not found: ${image}"
     fi
 
     local exports=
@@ -166,10 +204,10 @@ function gqcw.main() {
     [[ -n "${token}" ]] && exports="${exports} --env LOCATIONIQ_API_TOKEN=${token}"
 
     local opts="--interactive --rm"
-    [[ -n "${Xcontainer}" ]] && opts="${opts} --name ${Xcontainer}"
+    [[ -n "${container_name}" ]] && opts="${opts} --name ${container_name}"
     opts="${opts} --env GQC_DEBUG=${GQC_DEBUG}"
     opts="${opts} --env GQC_DEV=${GQC_DEV}"
-    [[ -n "${Xdockerargs}" ]] && opts="${opts} ${Xdockerargs}"
+    [[ -n "${docker_build_arguments}" ]] && opts="${opts} ${docker_build_arguments}"
     [[ -n "${exports}" ]] && opts="${opts} ${exports}"
     opts="${opts} --sig-proxy"
     opts="${opts} --stop-signal SIGTERM"
@@ -182,33 +220,52 @@ function gqcw.main() {
     else
         opts="${opts} --mount type=bind,src=${taskdir}/log,dst=/var/log/selby"
     fi
-    if [[ -n "${Xmount}" ]]; then
-        opts="${opts} ${Xmount}"
+    if [[ -n "${mount}" ]]; then
+        opts="${opts} ${mount}"
     fi
-    if [[ "${Xdebug}" == "true" ]]; then
+    if [[ "${debug}" == "true" ]]; then
        otherargs="--Xdebug ${otherargs}"
-   fi
-    if [[ "${Xdev}" == "true" ]]; then
+    fi
+    if [[ "${development_mode}" == "true" ]]; then
         opts="${opts} --mount type=bind,src=${taskdir}/src,dst=/usr/local/selby"
         otherargs="--Xdev ${otherargs}"
     fi
 
-    local cmd="docker run ${opts} ${Ximage} ${Xdockercmd} ${otherargs}"
-    if [[ "${Xdryrun}" == "true" ]]; then
+    local cmd="docker run ${opts} ${image} ${docker_run_command} ${otherargs}"
+    if [[ "${dryrun}" == "true" ]]; then
         gqcw.dryrun "GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd}" "${@}"
     else
-        [[ "${Xdebug}" == "true" ]] && gqcw.debug "GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd}" "${@}"
+        [[ "${debug}" == "true" ]] && gqcw.debug "GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd} ${@}"
         GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd} "${@}"
     fi
 }
 
-trap 'exit 0' USR1
-trap 'exit 1' USR2
-trap 's=$?; rm -rf ${TMPDIR}/${task}-${$}; exit $s' HUP INT TERM EXIT
+function gqcw.pull_docker_image() {
+    local repository=${1:?Need repository}
+    local tag=${2:?Need tag}
+    local dryrun=${3:-false}
+    local image=${repository}:${tag}
+    if [[ "${dryrun}" == 'true' ]]; then
+        gqcw.dryrun "pull command: docker pull ${image}"
+    else
+        (
+            cd "${taskdir}"
+            local cmd="docker pull ${image}"
+            gqcw.info "attempting to pull '${image}' from dockerhub ..."
+            gqcw.debug "pull command: docker pull ${image}"
+            docker pull ${image} >/dev/null 2>&1 && 
+            gqcw.info "image pulled from dockerhub: '${image}'"
+        ) || (gqcw.info "image not found on dockerhub: '${image}'")
+    fi
+    gqcw.find_docker_image  "${repository}" "${tag}"
+}
+
+TMPDIR="${TMPDIR}${task}-${$}-${RANDOM}" && mkdir -p ${TMPDIR}
+trap 'rm -rf ${TMPDIR}; exit 0' USR1
+trap 'rm -rf ${TMPDIR}; exit 1' USR2
+trap 's=$?; rm -rf ${TMPDIR}; exit $s' HUP INT TERM EXIT
 (
     gqcw.main "$@"
 )
 trap - HUP INT TERM EXIT USR1 USR2
 exit 0
-
-

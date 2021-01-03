@@ -274,10 +274,10 @@ function text.canonicalize() {
         perl -MUnicode::Normalize -lane '# \
             use open qw(:std :utf8);
             my $s = NFKD(qq($_));
-            $s =~ s/[^a-zA-Z0-9,\s]//g;
+            $s =~ s/[^[:alpha:]]//g;
             $s = lc($s);
             $s =~ s/^[[:space:]]+|[[:space:]]$//g;
-            $s =~ s/[[:space:]]+/ /g;
+            $s =~ s/[[:space:]]+//g;
             print qq($s);
        '
 }
@@ -386,7 +386,7 @@ function gqc.get-options() {
             ;;
         -C|--cache-directory)
             local file="${2}" && shift
-            [[ -e "${file}" ]] && (! [[ -w "${file}" ]]) ||  (log.fatal "log file can not be written: '${file}'")
+            [[ -e "${file}" ]] && (! [[ -w "${file}" ]]) ||  (log.fatal "cache directory can not be written: '${file}'")
             GQC[CACHEDIR]="${file}"
             ;;
         --copyright)
@@ -513,9 +513,9 @@ function gqc.main() {
 
         log.info "Reverse geoCode: {sn=$selbyNumber, country=\"$country\", div1=\"${state}\", lat=$latitude, lon=$longitude} => {country=\"$r_country\", state=\"$r_state\", response=${response}}}"
         if [[ "${c_r_country}" != "${c_country}" ]]; then
-            log.error "SN-${selbyNumber}: country '${country}' != reverse geocode '${r_country}'" 1>&2
+            log.error "SN-${selbyNumber}: country '${country}' != reverse geocode '${r_country}'"
         elif [[ "${c_r_state}" != "${c_state}" ]]; then
-            log.error "SN-${selbyNumber}: div1 '${state}' != reverse geocode '${r_state}'" 1>&2
+            log.error "SN-${selbyNumber}: div1 '${state}' != reverse geocode '${r_state}'"
         fi
 
         # TODO - Add a start and end record number to process; syntactic sugar for piping the dataset through head and tail.
@@ -564,16 +564,20 @@ Output is to stdout unless the --output option is given.
   -L, --log-file               The log file; defaults to /var/log/selby/gqc.log
   -l, --log-level              Sets the lowest severity level of log messages to show; one of DEBUG, INFO, WARN, ERROR, or QUIET; defaults to FATAL
       --longitude-precision p  Number of fractional digits of precision in longitude; defaults to 3
-  -q, --quiet                  Don't display any messages
+  -n, --name n                 Synonym for --container-name n
+      --no-build               Do not build the gqc image if it is missing
+      --no-pull                Do not pull the gqc image if it is available on Dockerhub
   -s, --separator s            Field separator; defaults to ","
-      --Xcontainer-name name   Override the docker container name
+      --container-name n       Override the docker container name
       --Xdebug                 Enable execution tracing
       --Xdev                   Enable developer mode; mounts `src` and `data`
-      --Xdockerargs args       String of arguments to add to docker invocation.
-      --Xdockercmd cmd         Container command to invoke on docker invocation
+      --Xbuild-arguments args  String of arguments to add to docker invocation.
+      --Xrun-command cmd       Container command to invoke on docker invocation
       --Xdryrun                Display the docker command to be run and exit
       --Ximage                 Sets the docker image and container names
       --Xmount                 Additional docker mount specification (implies --Xdev)
+      --Xrepository            The image repository name to load
+      --Xtag                   The image tag to load
 
 
 The --api-token and --api-host options get their default values from

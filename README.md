@@ -22,19 +22,19 @@ utility. A wrapper script is provided that invokes `docker` with all the usual o
 ### Source code organization
 
 <dl>
-  <dt><code>HOME/</code></dt>
+  <dt><code>BASE/</code></dt>
   <dd>Top level directory created by <code>git clone</code>; defaults to <code>georeference-quality-control/</code>.</dd>
-  <dt><code>HOME/bin/</code></dt>
+  <dt><code>BASE/bin/</code></dt>
   <dd>Local (host) commands; the wrapper <code>bin/gqc</code> invokes the docker image</dd>
-  <dt><code>HOME/cache/</code></dt>
+  <dt><code>BASE/cache/</code></dt>
   <dd>Default directory in which geolocation data is cached. See also <code>--cache-directory</code>.</dd>
-  <dt><code>HOME/data/</code></dt>
+  <dt><code>BASE/data/</code></dt>
   <dd>Contains example data files. See also <code>--Xdev</code>.</dd>
-  <dt><code>HOME/log/</code></dt>
+  <dt><code>BASE/log/</code></dt>
   <dd>Default location of the detailed log. See also <code>--log-file</code>.</dd>
-  <dt><code>HOME/src/</code></dt>
+  <dt><code>BASE/src/</code></dt>
   <dd>Source directory of utility packaged in the docker image. See also <code>--Xdev</code>.</dd>
-  <dt><code>HOME/src/bin/</code></dt>
+  <dt><code>BASE/src/bin/</code></dt>
   <dd>Source directory containing the <code>gqc</code> utility packaged in the docker image. See also <code>-Xdev</code>.</dd>
 </dl>
 
@@ -70,11 +70,10 @@ utility. A wrapper script is provided that invokes `docker` with all the usual o
 
 ### Configuration
 
-Create a `.gqc` file in your `HOME` directory with this text, replacing the
+Create a `.gqc` file in your `HOME` directory (typically `/home/USERNAME` (*nix), `/Users/USERNAME` (MacOS), or `C:\Users\USERNAME` (Windows)with this text, replacing the
 `LOCATIONIQ_API_TOKEN` value to your private key.
 
     # HOME/.gqc -- Selby Botany Geolocation Quality Control configuration
-    # Access key gqc-selby
     LOCATIONIQ_API_TOKEN="replace-me-with-your-private-LocationIQ-api-key"
 
 ## Usage
@@ -103,16 +102,20 @@ Create a `.gqc` file in your `HOME` directory with this text, replacing the
       -l, --log-level              Sets the lowest severity level of log messages to show;
                                    one of DEBUG, INFO, WARN, ERROR, or QUIET; defaults to FATAL
           --longitude-precision p  Number of fractional digits of precision in longitude; defaults to 3
-      -q, --quiet                  Don't display any messages
+      -n, --name n                 Synonym for --container-name n
+          --no-build               Do not build the gqc image if it is missing
+          --no-pull                Do not pull the gqc image if it is available on Dockerhub
       -s, --separator s            Field separator; defaults to ","
-          --Xcontainer-name name   Override the docker container name
+          --container-name n       Override the docker container name
           --Xdebug                 Enable execution tracing
           --Xdev                   Enable developer mode; mounts  and 
-          --Xdockerargs args       String of arguments to add to docker invocation.
-          --Xdockercmd cmd         Container command to invoke on docker invocation
+          --Xbuild-arguments args  String of arguments to add to docker invocation.
+          --Xrun-command cmd       Container command to invoke on docker invocation
           --Xdryrun                Display the docker command to be run and exit
           --Ximage                 Sets the docker image and container names
           --Xmount                 Additional docker mount specification (implies --Xdev)
+          --Xrepository            The image repository name to load
+          --Xtag                   The image tag to load
     
     
     The --api-token and --api-host options get their default values from
@@ -180,18 +183,18 @@ the file is ignored.
     27122b87e1780cf2d01ae21af5ec4f59ce959994 20201226T214818 [DEBUG] cleaned: c_country='ecuador' c_state='' selbyNumber='53823' c_latitude='17.086' c_longitude='-61.799'
     27122b87e1780cf2d01ae21af5ec4f59ce959994 20201226T214819 [INFO] Reverse geoCode: {sn=53823, country="Ecuador", div1="", lat=17.08573, lon=-61.799254} => {country="Antigua and Barbuda", state="null", response={"place_id":"118516782","licence":"https://locationiq.com/attribution","osm_type":"way","osm_id":"150137622","lat":"17.0863473","lon":"-61.8009697004625","display_name":"Lebanon Moravian Church;Seaview Farm Moravian Church, Church Lane, Sea View Farm, Saint George, ANU, Antigua and Barbuda","address":{"place_of_worship":"Lebanon Moravian Church;Seaview Farm Moravian Church","road":"Church Lane","village":"Sea View Farm","region":"Saint George","postcode":"ANU","country":"Antigua and Barbuda","country_code":"ag"},"boundingbox":["17.0862361","17.0864356","-61.8010773","-61.8008621"]}}}
     27122b87e1780cf2d01ae21af5ec4f59ce959994 20201226T214819 [ERROR] SN-53823: country 'Ecuador' != reverse geocode 'Antigua and Barbuda'
-    
+
 The first field in the log records is a "request identifier" unique to each command invocation. All the log records created by a command will have the same request identifier.
 
-The second field is a timestamp for the log entry.
+The second field is a timestamp for the log entry (in [ISO 8601 `YYYYMMDDTHHmmss` format](https://en.wikipedia.org/wiki/ISO_8601#Combined_date_and_time_representations)).
 
 ## Development setup
 
-1. Use the '--Xdebug' option to enable detais tracing (`set -xv`); setting the `GQC_DEBUG` environment variable to true will enable tracing at the start of the script rather than deferring it to options processing. 
+1. Use the `--Xdebug` option to enable detais tracing (`set -xv`); setting the `GQC_DEBUG` environment variable to true will enable tracing at the start of the script rather than deferring it to options processing. 
 
-2. Use the '--Xdev' option to run the docker image with local source and data directories mounted to the docker image.
+2. Use the `--Xdev` option to run the docker image with local source and data directories mounted to the docker image.
 
-3. Use the '--Xmount' option to add additional mounts to the docker image.
+3. Use the `--Xmount` option to add additional mounts to the docker image.
 
 4. Build image with `docker build -t botany-gqc .`
 
@@ -199,7 +202,7 @@ The second field is a timestamp for the log entry.
 
 1. Build or pull image as needed.
 
-2. Signals are not being properly handled so SIGTERM (^C) doesn't work properly. Workarounds: `docker kill` in another shell or `^Z; kill -HUP %1` 
+2. Signals are not being properly handled so `SIGTERM` (Ctrl-C) doesn't work properly. Workarounds: `docker kill` in another shell or `^Z; kill -HUP %1` 
 
 3. Add tests 
 
