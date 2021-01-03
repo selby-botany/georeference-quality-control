@@ -16,6 +16,7 @@ GQC_DEBUG=$(echo "${GQC_DEBUG}" | tr A-Z a-z)
 if [[ "${GQC_DEBUG}" == "true" ]]; then set -xv; fi
 export GQC_DEV="${GQC_DEV:-false}"
 GQC_DEV=$(echo "${GQC_DEV}" | tr A-Z a-z)
+export GQC_PID=$$
 
 (( ${BASH_VERSINFO:-0} < 4 )) && (echo "[FATAL] bash version 4 or greater is required" 1>&2; exit 1)
 
@@ -195,10 +196,10 @@ function locationiq.reverse-geolocate() {
     local latitude=$(text.trim "${1:?Need latitude}")
     local longitude=$(text.trim "${2:?Need longitude}")
     local url=$(locationiq.reverse-geolocate-url "${latitude}" "${longitude}")
-    log.debug "Reverse Geolocate: country=${c_country} div1=${c_state} lat=${latitude} long=${longitude} url=${url}" > /dev/null
+    log.debug "reverse-geolocate: lat=${latitude} long=${longitude} url=${url}" > /dev/null
     result=$(curl --silent --get "${url}")
     local error=$(echo "${result}" | jq .error)
-    [[ -n "${error}" ]] && [[ "${error}" != "null" ]] && (log.fatal "Reverse geolocate request error: url='${url}' error='${error}'")
+    [[ -n "${error}" ]] && [[ "${error}" != "null" ]] && (log.fatal "reverse geolocate request error: url='${url}' error='${error}'")
     echo "${result}"
 }
 
@@ -236,6 +237,7 @@ function log.fatal() {
     if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
         log.log "[FATAL] $line"
     done 1>&2
+    gqc.exit_1
 }
 
 function log.info() {
@@ -373,7 +375,7 @@ function gqc.exit_1 () {
 function gqc.get-options() {
     if ! options=$(getopt -n "${GQC[TASK]}" -o 'C:Hi:L:l:o:qs:' -l 'api-host:,api-token:,cache-directory:,copyright,first-line-is-data,help,input:,latitude-precision:,log-file:,log-level:,longitude-precision:,output:,quiet,separator:,start-record:,Xdebug,Xdev' -- "$@"); then
         # something went wrong, getopt will put out an error message for us
-        echo 1>&2; gqc.usage 1>&2; exit 1
+        echo 1>&2; gqc.usage 1>&2; gqc.exit_1
     fi
     eval set -- "${options}"
     while [[ "${#}" -gt "0" ]]; do
@@ -390,13 +392,13 @@ function gqc.get-options() {
             GQC[CACHEDIR]="${file}"
             ;;
         --copyright)
-            gqc.copyright; exit 0
+            gqc.copyright; gqc.exit_0
             ;;
         --first-line-is-data)
             GQC[FIRST_LINE_IS_DATA]=true
             ;;
         -H|--help)
-            gqc.usage; exit 0
+            gqc.usage; gqc.exit_0
             ;;
         -i|--input)
             GQC[INPUT]="${2}" && shift
@@ -481,11 +483,14 @@ function gqc.main() {
     log.debug "LOCATIONIQ[API_TOKEN]=${LOCATIONIQ[API_TOKEN]}"
     log.debug "LOCATIONIQ[API_HOST]=${LOCATIONIQ[API_HOST]}"
 
+    [[ -n $(gqc.reverse-geolocate 0 0 false) ]] ||
+        log.fatal "LocationIQ API unreachable: token ${LOCATIONIQ[API_TOKEN]}, host ${LOCATIONIQ[API_HOST]}"
+
     local n=0
     local OLDIFS="${IFS}"
     IFS="${GQC[SEPARATOR]}"
     local country state selbyNumber latitude longitude
-    
+
     cat "${GQC[INPUT]}" | text.trim | while read country state selbyNumber latitude longitude ; do
         log.debug "raw-record: country='${country}' state='${state}' selbyNumber='${selbyNumber}' latitude='${latitude}' longitude='${longitude}'"
 
@@ -520,16 +525,17 @@ function gqc.main() {
 
         # TODO - Add a start and end record number to process; syntactic sugar for piping the dataset through head and tail.
         n=$((n+1))
-        if false; then if [[ "${n}" -gt 1 ]]; then exit 0; fi fi
+        if false; then if [[ "${n}" -gt 1 ]]; then gqc.exit_0; fi fi
     done
     IFS="${OLDIFS}"
 }
 
 function gqc.reverse-geolocate() {
     local latitude=$(text.trim "${1:?Need latitude}")
-    local longitude=$(text.trim "${2:?Need longitude}")   
+    local longitude=$(text.trim "${2:?Need longitude}")
+    local usecache="${3:-true}"
     local cachekey="latitude:${latitude},longitude:${longitude}"
-    if cache.__get "${cachekey}"; then
+    if [[ "${usecache}" == 'true' ]] && cache.__get "${cachekey}"; then
         # get writes the record to stdout, so nothing to do here
         true
     else
