@@ -28,7 +28,7 @@ function gqcw.build_docker_image() {
     local repository=${1:?Need repository} && shift
     local tag=${1:?Need tag} && shift
     local dryrun=${1:?Need dryrun} && shift
-    local othertags="${@}"
+    local othertags="$@"
     local image="${repository}:${tag}"
     local cmd="docker build --tag ${image} ${othertags} ${taskdir}"
     if [[ "${dryrun}" == "true" ]]; then
@@ -51,11 +51,11 @@ function gqcw.build_docker_image() {
 }
 
 function gqcw.debug () {
-    ([[ "${GQC_DEV}" == 'true' ]] && echo "[DEBUG] ${@}" 1>&2) || true
+    ([[ "${GQC_DEV}" == 'true' ]] && echo "[DEBUG] $@" 1>&2) || true
 }
 
 function gqcw.dryrun () {
-    echo "[DRYRUN] ${@}" 1>&2
+    echo "[DRYRUN] $@" 1>&2
 }
 
 function gqcw.exit_0 () {
@@ -69,18 +69,18 @@ function gqcw.exit_1 () {
 }
 
 function gqcw.fatal () {
-    gqcw.fatal_no_exit "${@}" 1>&2
+    gqcw.fatal_no_exit "$@" 1>&2
     gqcw.exit_1
 }
 
 function gqcw.fatal_no_exit () {
-    echo "[FATAL] ${@}" 1>&2
+    echo "[FATAL] $@" 1>&2
 }
 
 function gqcw.find_docker_image() {
     local repository=${1:?Need repository}
     local tag=${2:?Need tag}
-    [[ -n $(docker images --quiet ${repository}:${tag} | uniq | head --lines 1) ]]
+    [[ -n $(docker images --quiet ${repository}:${tag} | uniq | head -n 1) ]]
 }
 
 function gqcw.get_ini() {
@@ -99,7 +99,7 @@ function gqcw.get_ini() {
 }
 
 function gqcw.info () {
-    echo "[INFO] ${@}" 1>&2
+    echo "[INFO] $@" 1>&2
 }
 
 function gqcw.main() {
@@ -115,7 +115,7 @@ function gqcw.main() {
     local pull=true
     
     local repository=selbybotany/gqc
-    local tag=$(cd "${taskdir}" && git branch --show-current)
+    local tag=$(([[ -r "${taskdir}/version" ]] && cat "${taskdir}/version") || (cd "${taskdir}" && git branch --show-current 2>/dev/null) || (echo 'local'))
     local build_tags=
     local container_name=$(echo "${repository}" | tr -d '[:space:]' | tr -c '[:alnum:]' '-')
     local mount=
@@ -233,10 +233,10 @@ function gqcw.main() {
 
     local cmd="docker run ${opts} ${image} ${docker_run_command} ${otherargs}"
     if [[ "${dryrun}" == "true" ]]; then
-        gqcw.dryrun "GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd}" "${@}"
+        gqcw.dryrun "GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd}" "$@"
     else
-        [[ "${debug}" == "true" ]] && gqcw.debug "GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd} ${@}"
-        GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd} "${@}"
+        [[ "${debug}" == "true" ]] && gqcw.debug "GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd}" "$@"
+        GQC_DEBUG=${GQC_DEBUG} GQC_DEV=${GQC_DEV} ${cmd} "$@"
     fi
 }
 
