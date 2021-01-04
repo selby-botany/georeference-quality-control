@@ -43,7 +43,7 @@ function gqcw.build_docker_image() {
                 gqcw.debug "${line}'"
             done
             gqcw.exit_1
-            ßfalse
+            false
         fi
     fi
     gqcw.info "image build complete: '${image}'"
@@ -115,7 +115,7 @@ function gqcw.main() {
     local pull=true
     
     local repository=selbybotany/gqc
-    local tag=$(([[ -r "${taskdir}/version" ]] && cat "${taskdir}/version") || (cd "${taskdir}" && git branch --show-current 2>/dev/null) || (echo 'local'))
+    local tag=$(([[ -r "${taskdir}/version" ]] && cat "${taskdir}/version") || (cd "${taskdir}" && git branch --show-current 2>/dev/null) || (echo 'v0.0.1'))
     local build_tags=
     local container_name=$(echo "${repository}" | tr -d '[:space:]' | tr -c '[:alnum:]' '-')
     local mount=

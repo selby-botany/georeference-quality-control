@@ -44,20 +44,21 @@ utility. A wrapper script is provided that invokes `docker` with all the usual o
 
 1. [Docker Desktop](https://www.docker.com/)
 2. [bash shell](https://www.gnu.org/software/bash/) version 4 or later
+2. [git (optional)](https://git-scm.com/)
 
-### Install on Linux
-
-1. Install [Docker Desktop](https://www.docker.com/) per instructions.
-2. Download a copy of the utility: `git clone git@github.com:selby-botany/georeference-quality-control.git`
-3. Change to working directory: `cd georeference-quality-control`
-3. Run it. Example: `bin/gqc --help` or `cat data/gqc-ecuador.csv | bin/gqc`
-
-### Install on OS X & other unix systems
+### Install on OS X & other unix systems with git
 
 1. Install [Docker](https://www.docker.com/).
 2. If the system's default bash is **not** version 4 or later, then you will need to install an updated bash package. On many systems, installing [pkgin](https://pkgin.net/) and then `pkgin install bash` will install an updated `/opt/pkg/bin/bash`.
 3. Download a copy of the utility: `git clone git@github.com:selby-botany/georeference-quality-control.git`
 4. Run it. Example: `bin/gqc --help` or `cat data/gqc-ecuador.csv | bin/gqc`
+
+### Install on Linux without git
+
+1. Download a archive of the utility: with a web browser visit [selbybotany/gqc on GitHub](https://github.com/selby-botany/georeference-quality-control/tree/v0.0.1) and select "Download ZIP" from the "Code" dropdown menu.
+2. Unzip the archive: `unzip georeference-quality-control-0.0.1.zip`
+3. Change to working directory: `cd georeference-quality-control-0.0.1`
+3. Run it. Example: `bin/gqc --help` or `cat data/gqc-ecuador.csv | bin/gqc`
 
 ### Install on Windows 10
 
@@ -92,9 +93,7 @@ Create a `.gqc` file in your `HOME` directory (typically `/home/USERNAME` (*nix)
           --api-host               LocationIQ API endpoint hostname
       -C, --cache-directory d      Cache directory; defaults to /var/cache/selby/gqc
           --comment-character c    All input starting at a comment character until
-          --first-line-is-data     The first line of input should be treated as data.
-                                   By default the first line is treated as a column
-                                   label heading and skipped
+          --container-name n       Override the docker container name
           --copyright              Display the copyright and exit
       -H, --help                   Display this help and exit
           --latitude-precision p   Number of fractional digits of precision in latitude; defaults to 3
@@ -106,13 +105,11 @@ Create a `.gqc` file in your `HOME` directory (typically `/home/USERNAME` (*nix)
           --no-build               Do not build the gqc image if it is missing
           --no-pull                Do not pull the gqc image if it is available on Dockerhub
       -s, --separator s            Field separator; defaults to ","
-          --container-name n       Override the docker container name
           --Xdebug                 Enable execution tracing
           --Xdev                   Enable developer mode; mounts  and 
           --Xbuild-arguments args  String of arguments to add to docker invocation.
           --Xrun-command cmd       Container command to invoke on docker invocation
           --Xdryrun                Display the docker command to be run and exit
-          --Ximage                 Sets the docker image and container names
           --Xmount                 Additional docker mount specification (implies --Xdev)
           --Xrepository            The image repository name to load
           --Xtag                   The image tag to load

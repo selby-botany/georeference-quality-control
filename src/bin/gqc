@@ -24,7 +24,6 @@ export GQC_PID=$$
 declare -A GQC
 GQC[DEBUG]=${GQC_DEBUG}
 GQC[DEV]=${GQC_DEV}
-GQC[FIRST_LINE_IS_DATA]=${GQC_FIRST_LINE_IS_DATA:-false}
 GQC[INPUT]=${GQC_INPUT:-/dev/stdin}
 GQC[OUTPUT]=${GQC_OUTPUT:-/dev/stdout}
 GQC[QUIET]=${GQC_QUIET:-false}
@@ -48,7 +47,7 @@ LOG[WARN]=3
 LOG[ERROR]=2
 LOG[FATAL]=1
 LOG[QUIET]=0
-LOG[LOGLEVEL]="${LOG[ERROR]}"
+LOG[LOGLEVEL]="${LOG[INFO]}"
 LOG[REQUESTID]=
 LOG[USE_TIMESTAMP]=false
 
@@ -377,7 +376,7 @@ function gqc.exit_1 () {
 }
 
 function gqc.get-options() {
-    if ! options=$(getopt -n "${GQC[TASK]}" -o 'C:Hi:L:l:o:qs:' -l 'api-host:,api-token:,cache-directory:,copyright,first-line-is-data,help,input:,latitude-precision:,log-file:,log-level:,longitude-precision:,output:,quiet,separator:,start-record:,Xdebug,Xdev' -- "$@"); then
+    if ! options=$(getopt -n "${GQC[TASK]}" -o 'C:Hi:L:l:o:qSs:' -l 'api-host:,api-token:,cache-directory:,copyright,help,input:,latitude-precision:,log-file:,log-level:,longitude-precision:,output:,quiet,separator:,start-record:,summarize,Xdebug,Xdev' -- "$@"); then
         # something went wrong, getopt will put out an error message for us
         echo 1>&2; gqc.usage 1>&2; gqc.exit_1
     fi
@@ -397,9 +396,6 @@ function gqc.get-options() {
             ;;
         --copyright)
             gqc.copyright; gqc.exit_0
-            ;;
-        --first-line-is-data)
-            GQC[FIRST_LINE_IS_DATA]=true
             ;;
         -H|--help)
             gqc.usage; gqc.exit_0
@@ -441,6 +437,10 @@ function gqc.get-options() {
             GQC[SEPARATOR]=$(echo "${2}") && shift
             [[ ${#GQC[SEPARATOR]} -eq 1 ]] || (log.fatal "illegal separator '${GQC[SEPARATOR]}': expecting one character")
             ;;
+        -S|--summarize)
+            gqc.summarize-logfile /dev/stdin
+            gqc.exit_0
+            ;;
         --Xdebug)
             set -xv
             GQC_XDEBUG=true
@@ -473,7 +473,6 @@ function gqc.main() {
     log.debug "GQC[COMMAND]=${GQC[COMMAND]}"
     log.debug "GQC[REQUESTID]=${GQC[REQUESTID]}"
     log.debug "GQC[CACHEDIR]=${GQC[CACHEDIR]}"
-    log.debug "GQC[FIRST_LINE_IS_DATA]=${GQC[FIRST_LINE_IS_DATA]}"
     log.debug "GQC[INPUT]=${GQC[INPUT]}"
     log.debug "GQC[LATITUDE_PRECISION]=${GQC[LATITUDE_PRECISION]}"
     log.debug "GQC[LONGITUDE_PRECISION]=${GQC[LONGITUDE_PRECISION]}"
@@ -522,8 +521,8 @@ function gqc.main() {
             local c_r_county=$(text.canonicalize "${r_county}")
             local c_r_city=$(text.canonicalize "${r_city}")
             local c_r_region=$(text.canonicalize "${r_region}")
-    
-            log.info "reverse-geocode: {sn=$selbyNumber, country=\"${c_country}\", div1=\"${c_state}\", lat=${c_latitude}, lon=${c_longitude}} => {country=\"$r_country\", state=\"$r_state\", response=${response}}}"
+
+            log.debug "reverse-geocode: {sn=$selbyNumber, country=\"${c_country}\", div1=\"${c_state}\", lat=${c_latitude}, lon=${c_longitude}} => {country=\"$r_country\", state=\"$r_state\", response=${response}}}"
             if [[ "${c_r_country}" != "${c_country}" ]]; then
                 log.error "SN-${selbyNumber}: country '${country}' != reverse geocode '${r_country}'"
             elif [[ "${c_r_state}" != "${c_state}" ]]; then
@@ -536,6 +535,7 @@ function gqc.main() {
         if false; then if [[ "${n}" -gt 1 ]]; then gqc.exit_0; fi fi
     done
     IFS="${OLDIFS}"
+    gqc.summarize-logfile
 }
 
 function gqc.reverse-geolocate() {
@@ -552,6 +552,13 @@ function gqc.reverse-geolocate() {
     fi
 }
 
+function gqc.summarize-logfile() {
+    local logfile=${1:-${LOG[LOGFILE]}}
+    [[ -r "${logfile}" ]] && log.info "Summary" && 
+        (cat "${logfile}" | "${GQC[TASKDIR]}/gqc-summarize" | log.info)
+    true
+}
+
 function gqc.usage() {
     cat <<END_OF_USAGE
 Usage: ${GQC[TASK]} [OPTION]...
@@ -566,29 +573,27 @@ Output is to stdout unless the --output option is given.
 
       --api-token              LocationIQ API token
       --api-host               LocationIQ API endpoint hostname
-  -C, --cache-directory d      Cache directory; defaults to /var/cache/selby/gqc
+  -C, --cache-directory d      Cache directory; defaults to "/var/cache/selby/gqc"
       --comment-character c    All input starting at a comment character until
-      --first-line-is-data     The first line of input should be treated as data.
-                               By default the first line is treated as a column
-                               label heading and skipped
+      --container-name n       Override the docker container name
       --copyright              Display the copyright and exit
   -H, --help                   Display this help and exit
       --latitude-precision p   Number of fractional digits of precision in latitude; defaults to 3
-  -L, --log-file               The log file; defaults to /var/log/selby/gqc.log
-  -l, --log-level              Sets the lowest severity level of log messages to show; one of DEBUG, INFO, WARN, ERROR, or QUIET; defaults to FATAL
+  -L, --log-file file          The log file; defaults to "/var/log/selby/gqc/{timestamp}.log"
+  -l, --log-level              Sets the lowest severity level of log messages to show;
+                               one of DEBUG, INFO, WARN, ERROR, or QUIET; defaults to FATAL
       --longitude-precision p  Number of fractional digits of precision in longitude; defaults to 3
-  -n, --name n                 Synonym for --container-name n
+  -n, --name n                 Synonym for "--container-name n"
       --no-build               Do not build the gqc image if it is missing
       --no-pull                Do not pull the gqc image if it is available on Dockerhub
   -s, --separator s            Field separator; defaults to ","
-      --container-name n       Override the docker container name
+  -S. --summarize              Summarize a log file piped to stdin and exit
       --Xdebug                 Enable execution tracing
-      --Xdev                   Enable developer mode; mounts `src` and `data`
+      --Xdev                   Enable developer mode; mounts "src" and "data"
       --Xbuild-arguments args  String of arguments to add to docker invocation.
       --Xrun-command cmd       Container command to invoke on docker invocation
       --Xdryrun                Display the docker command to be run and exit
-      --Ximage                 Sets the docker image and container names
-      --Xmount                 Additional docker mount specification (implies --Xdev)
+      --Xmount                 Additional docker mount specification (implies "--Xdev")
       --Xrepository            The image repository name to load
       --Xtag                   The image tag to load
 
