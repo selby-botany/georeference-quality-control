@@ -49,6 +49,8 @@ LOG[ERROR]=2
 LOG[FATAL]=1
 LOG[QUIET]=0
 LOG[LOGLEVEL]="${LOG[ERROR]}"
+LOG[REQUESTID]=
+LOG[USE_TIMESTAMP]=false
 
 function cache.__check_function() {
     local f=${1:-Need function}
@@ -256,9 +258,11 @@ function log.log() {
 
 function log.log-to-logfile() {
     if [[ -n "${LOG[LOGFILE]:-}" ]]; then
-        local logdate=$(date -u +%Y%m%dT%H%M%S)
+        ([[ -f "${LOG[LOGFILE]}" ]] && [[ -w "${LOG[LOGFILE]}" ]]) ||
+            (mkdir -p $(dirname -- "${LOG[LOGFILE]}") && touch -- "${LOG[LOGFILE]}")
         local rid=
-        [[ -n "${GQC[REQUESTID]:-}" ]] && rid="${GQC[REQUESTID]} ${logdate} "
+        [[ "${LOG[USE_TIMESTAMP]}" == 'true' ]] && rid="$(date +%Y%m%dT%H%M%S) ${rid}"
+        [[ -n "${LOG[REQUESTID]}" ]] && rid="${LOG[REQUESTID]} ${rid} "
         if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
             echo "${rid}${line}" >> "${LOG[LOGFILE]}"
         done
@@ -328,7 +332,7 @@ function gqc.initialize() {
     GQC[REQUESTID]=$(echo "${GQC[TASK]}+$(hostname -f)+$$+$(date -u '+%Y%m%dT%I%M%S')" | hash.sha1 | awk {'print $1'})
     GQC[CACHEDIR]=${GQC[CACHEDIR]:-/var/cache/selby/${GQC[TASK]}}
 
-    LOG[LOGFILE]=${LOG[LOGFILE]:-/var/log/selby/${GQC[TASK]}.log}
+    LOG[LOGFILE]=${LOG[LOGFILE]:-/var/log/selby/${GQC[TASK]}/$(date '+%Y%m%dT%I%M%S').log}
 }
 
 function gqc.clean-latitude () {
@@ -519,7 +523,7 @@ function gqc.main() {
             local c_r_city=$(text.canonicalize "${r_city}")
             local c_r_region=$(text.canonicalize "${r_region}")
     
-            log.info "reverse-geoCode: {sn=$selbyNumber, country=\"$country\", div1=\"${state}\", lat=$latitude, lon=$longitude} => {country=\"$r_country\", state=\"$r_state\", response=${response}}}"
+            log.info "reverse-geocode: {sn=$selbyNumber, country=\"${c_country}\", div1=\"${c_state}\", lat=${c_latitude}, lon=${c_longitude}} => {country=\"$r_country\", state=\"$r_state\", response=${response}}}"
             if [[ "${c_r_country}" != "${c_country}" ]]; then
                 log.error "SN-${selbyNumber}: country '${country}' != reverse geocode '${r_country}'"
             elif [[ "${c_r_state}" != "${c_state}" ]]; then
