@@ -4,6 +4,7 @@ use strict;
 use warnings;
 
 my %errors;
+my %errcounts;
 while (<STDIN>) {
     chomp;
     next if m/^\s*#/;
@@ -11,14 +12,12 @@ while (<STDIN>) {
     my ($selbyNumber, $errmsg) = ($1, $2);
     push @{$errors{$errmsg}}, $selbyNumber;
 }
-
-my %errcounts;
 foreach my $err (sort(keys %errors)) {
     $errcounts{$err} = (scalar @{$errors{$err}});
 }
 
-my @es = sort { $errors{$a} <=> $errors{$b} } keys(%errors);
-my @ms = sort { $errcounts{$b} <=> $errcounts{$a} } keys(%errcounts);
+my @es = sort { $errors{$a} cmp $errors{$b} or $a cmp $b } keys(%errors);
+my @ms = sort { $errcounts{$b} <=> $errcounts{$a} or $a cmp $b} keys(%errcounts);
 foreach my $err (@ms) {
     print "Error: «$err» (N=$errcounts{$err}); SelbyNumbers: " .
           join(', ',@{$errors{$err}}) . 
