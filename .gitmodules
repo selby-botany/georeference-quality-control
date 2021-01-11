@@ -1,0 +1,3 @@
+[submodule "src/lib/vendor/kward/shunit2"]
+	path = src/lib/vendor/kward/shunit2
+	url = https://github.com/kward/shunit2.git
