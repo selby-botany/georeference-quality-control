@@ -571,12 +571,12 @@ function gqc.usage() {
 Usage: ${GQC[TASK]} [OPTION]...
 
 Performs a georeferencing quality control check. The input file is in
-CSV (comma separated values), but a different field separater can be
+CSV (comma separated values), but a different field separator can be
 specified with the --separator option.
 
-Input is read from stdin unless the --input option is given.
+Input is read from /dev/stdin unless the --input option is given.
 
-Output is to stdout unless the --output option is given.
+Output is to /dev/stdout unless the --output option is given.
 
       --api-token              LocationIQ API token
       --api-host               LocationIQ API endpoint hostname
@@ -607,6 +607,7 @@ Output is to stdout unless the --output option is given.
       --Xmount                 Additional docker mount specification (implies "--Xdev")
       --Xrepository            The image repository name to load
       --Xtag                   The image tag to load
+      --                       Terminates the list of options
 
 
 The --api-token and --api-host options get their default values from
