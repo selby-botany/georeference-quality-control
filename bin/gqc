@@ -12,23 +12,24 @@ set -o nounset
 set -o pipefail
 
 export GQC_DEBUG="${GQC_DEBUG:-false}"
-GQC_DEBUG=$(echo "${GQC_DEBUG}" | tr A-Z a-z)
+GQC_DEBUG=$(echo "${GQC_DEBUG}" | tr '[:upper:]' '[:lower:]')
 if [[ "${GQC_DEBUG}" == "true" ]]; then set -xv; fi
 export GQC_DEV="${GQC_DEV:-false}"
-GQC_DEV=$(echo "${GQC_DEV}" | tr A-Z a-z)
+GQC_DEV=$(echo "${GQC_DEV}" | tr '[:upper:]' '[:lower:]')
 GQC_PID=$$
 
 prg=${BASH_SOURCE[0]}
-([[ -n "${prg}" ]] && [[ -f "${prg}" ]]) || (echo "[FATAL] cannot locate: '$0'" 1>&2; kill -USR2 $GQC_PID)
+[[ ( -n "${prg}" ) && ( -f "${prg}" ) ]] || (echo "[FATAL] cannot locate: '$0'" 1>&2; kill -USR2 $GQC_PID)
 task=$(basename -- "$0")
-taskdir=$(cd $(dirname -- "$0")/.. > /dev/null && pwd)
+taskdir=$(dirname -- "$0")
+taskdir=$(cd "${taskdir}/.." > /dev/null && pwd)
 
 
 function gqcw.build_docker_image() {
     local repository=${1:?Need repository} && shift
     local tag=${1:?Need tag} && shift
     local dryrun=${1:?Need dryrun} && shift
-    local othertags="$@"
+    local othertags="$*"
     local image="${repository}:${tag}"
     local cmd="docker build --tag ${image} ${othertags} ${taskdir}"
     if [[ "${dryrun}" == "true" ]]; then
@@ -37,11 +38,11 @@ function gqcw.build_docker_image() {
         local tmp="${TMPDIR}/${task}-${$}-${RANDOM}"
         gqcw.info "building image: '${image}' ..."
         gqcw.debug "build command: ${cmd}"
-        if (! (cd "${taskdir}" && ${cmd} >${tmp} 2>&1)); then
+        if (! (cd "${taskdir}" && ${cmd} >"${tmp}" 2>&1)); then
             gqcw.fatal "image can not be built: '${image}'"
-            cat "${tmp}" | while read line ; do
+            while read -r line ; do
                 gqcw.debug "${line}'"
-            done
+            done < "${tmp}"
             gqcw.exit_1
             false
         fi
@@ -50,12 +51,18 @@ function gqcw.build_docker_image() {
     gqcw.find_docker_image  "${repository}" "${tag}"
 }
 
+function gqcw.cleanup() {
+    local status=${1:-${?}}
+    rm -rf "${TMPDIR}"
+    exit "${status}"
+}
+
 function gqcw.debug () {
-    ([[ "${GQC_DEV}" == 'true' ]] && echo "[DEBUG] $@" 1>&2) || true
+    ([[ "${GQC_DEV}" == 'true' ]] && echo "[DEBUG] $*" 1>&2) || true
 }
 
 function gqcw.dryrun () {
-    echo "[DRYRUN] $@" 1>&2
+    echo "[DRYRUN] $*" 1>&2
 }
 
 function gqcw.exit_0 () {
@@ -69,18 +76,18 @@ function gqcw.exit_1 () {
 }
 
 function gqcw.fatal () {
-    gqcw.fatal_no_exit "$@" 1>&2
+    gqcw.fatal_no_exit "$*" 1>&2
     gqcw.exit_1
 }
 
 function gqcw.fatal_no_exit () {
-    echo "[FATAL] $@" 1>&2
+    echo "[FATAL] $*" 1>&2
 }
 
 function gqcw.find_docker_image() {
     local repository=${1:?Need repository}
     local tag=${2:?Need tag}
-    [[ -n $(docker images --quiet ${repository}:${tag} | uniq | head -n 1) ]]
+    [[ -n $(docker images --quiet "${repository}":"${tag}" | uniq | head -n 1) ]]
 }
 
 function gqcw.get_ini() {
@@ -91,20 +98,19 @@ function gqcw.get_ini() {
     local retval=${default}
     for inifile in "${inifiles[@]}"; do
         if [[ -r "${inifile}" ]]; then
-            val=$(cat "${inifile}" | grep --text --extended-regexp -- "^${var}=" | tail -n 1 | cut -d= -f2- | sed "s/^\([\"']\)\(.*\)\1\$/\2/g")
+            val=$(grep --text --extended-regexp -- "^${var}=" <"${inifile}" | tail -n 1 | cut -d= -f2- | sed "s/^\([\"']\)\(.*\)\1\$/\2/g")
             retval=${val:-${retval}}
         fi
     done
-    echo $retval
+    echo "$retval"
 }
 
 function gqcw.info () {
-    echo "[INFO] $@" 1>&2
+    echo "[INFO] $*" 1>&2
 }
 
 function gqcw.main() {
     local cachedir="${taskdir}/cache"
-    local logdir=
     local logfile=
     local build=true
     local debug=${GQC_DEBUG}
@@ -114,60 +120,62 @@ function gqcw.main() {
     local dryrun=false
     local pull=true
     
-    local repository=selbybotany/gqc
-    local tag=$(([[ -r "${taskdir}/version" ]] && cat "${taskdir}/version") || (cd "${taskdir}" && git branch --show-current 2>/dev/null) || (echo 'v0.0.1'))
+    local docker_repository=selbybotany/gqc
+    local tag=
+    tag=$( [[ -r "${taskdir}/version" ]] && cat "${taskdir}/version" || (cd "${taskdir}" && git branch --show-current 2>/dev/null) || (echo 'v0.0.1'))
     local build_tags=
-    local container_name=$(echo "${repository}" | tr -d '[:space:]' | tr -c '[:alnum:]' '-')
+    local container_name=
+    container_name=$(echo "${docker_repository}" | tr -d '[:space:]' | tr -c '[:alnum:]' '-')
     local mount=
 
     local otherargs=
     while [[ "${#}" -gt "0" ]]; do
         case ${1} in
-        --cache-directory|-C)
+        '--cache-directory'|'-C')
             local file="${2}" && shift
-            ([[ -d "${file}" ]] && [[ -w "${file}" ]]) || (gqcw.fatal "cache directory does not exist or can not be written: '${file}'")
+            [[ ( -d "${file}" ) && ( -w "${file}" ) ]] || gqcw.fatal "cache directory does not exist or can not be written: '${file}'"
             cachedir="${file}"
             ;;
-        --container-name|--name|-n)
+        '--container-name'|'--name'|'-n')
             container_name="${2}" && shift
             ;;
-        --log-file|-L)
+        '--log-file'|'-L')
             local file="${2}" && shift
             [[ -e "${file}" ]] || (touch -- "${file}" || gqcw.fatal "log file can not be written: '${file}'")
-            [[ -w "${file}" ]] || (gqcw.fatal "log file can not be written: '${file}'")
+            [[ -w "${file}" ]] || gqcw.fatal "log file can not be written: '${file}'"
             logfile="${file}"
             ;;
-        --no-build)
+        '--no-build')
             build=false
             ;;
-        --no-pull)
+        '--no-pull')
             pull=false
             ;;
-        --Xbuild-arguments)
+        '--Xbuild-arguments')
             docker_build_arguments="${docker_build_arguments} ${2}" && shift
             ;;
-        --Xdebug)
+        '--Xdebug')
             set -xv
             debug=true
             GQC_DEBUG=true
             ;;
-        --Xdev)
+        '--Xdev')
             development_mode=true
             GQC_DEV=true
             ;;
-        --Xdryrun)
+        '--Xdryrun')
             dryrun=true
             ;;
-        --Xrepository)
+        '--Xrepository')
             docker_repository="${2}" && shit
             ;;
-        --Xrun-command)
+        '--Xrun-command')
             docker_run_command="${2}" && shift
             ;;
-        --Xtag)
+        '--Xtag')
             build_tags="${build_tags} ${2}" && shift
             ;;
-        --Xmount)
+        '--Xmount')
             mount="${mount} --mount ${2}" && shift
             development_mode=true
             GQC_DEV=true
@@ -179,28 +187,30 @@ function gqcw.main() {
         shift
     done
 
-    local image=${repository}:${tag}
+    local image=${docker_repository}:${tag}
     local tmp=
     local t=
     for t in ${build_tags}; do
-        tmp="${tmp} --tag ${repository}:${t}"
+        tmp="${tmp} --tag ${docker_repository}:${t}"
     done
     build_tags="${tmp}"
 
-    if (! gqcw.find_docker_image  "${repository}" "${tag}") && [[ "${pull}" == "true" ]]; then
-        gqcw.pull_docker_image "${repository}" "${tag}" || true
+    if (! gqcw.find_docker_image  "${docker_repository}" "${tag}") && [[ "${pull}" == "true" ]]; then
+        gqcw.pull_docker_image "${docker_repository}" "${tag}" || true
     fi
-    if (! gqcw.find_docker_image  "${repository}" "${tag}") && [[ "${build}" == "true" ]]; then
-        gqcw.build_docker_image "${repository}" "${tag}" "${dryrun}" "${build_tags}" || true
+    if (! gqcw.find_docker_image  "${docker_repository}" "${tag}") && [[ "${build}" == "true" ]]; then
+        gqcw.build_docker_image "${docker_repository}" "${tag}" "${dryrun}" "${build_tags}" || true
     fi
-    if (! gqcw.find_docker_image  "${repository}" "${tag}"); then
+    if (! gqcw.find_docker_image  "${docker_repository}" "${tag}"); then
         gqcw.fatal "docker image not found: ${image}"
     fi
 
     local exports=
-    local host=$(gqcw.get_ini LOCATIONIQ_API_HOST)
+    local host=
+    host=$(gqcw.get_ini LOCATIONIQ_API_HOST)
     [[ -n "${host}" ]] && exports="${exports} --env LOCATIONIQ_API_HOST=${host}"
-    local token=$(gqcw.get_ini LOCATIONIQ_API_TOKEN)
+    local token=
+    token=$(gqcw.get_ini LOCATIONIQ_API_TOKEN)
     [[ -n "${token}" ]] && exports="${exports} --env LOCATIONIQ_API_TOKEN=${token}"
 
     local opts="--interactive --rm"
@@ -213,8 +223,11 @@ function gqcw.main() {
     opts="${opts} --stop-signal SIGTERM"
     opts="${opts} --mount type=bind,src=${cachedir},dst=/var/cache/selby"
     if [[ -n "${logfile}" ]]; then
-        local dir=$(cd $(dirname -- "${logfile}") > /dev/null && pwd)
-        local file=$(basename -- "${logfile}")
+        local dir=
+        dir=$(dirname -- "${logfile}")
+        dir=$(cd "${dir}" > /dev/null && pwd)
+        local file=
+        file=$(basename -- "${logfile}")
         opts="${opts} --mount type=bind,src=${dir},dst=/var/log/selby"
         otherargs="--log-file /var/log/selby/${file} ${otherargs}"
     else
@@ -253,17 +266,17 @@ function gqcw.pull_docker_image() {
             local cmd="docker pull ${image}"
             gqcw.info "attempting to pull '${image}' from dockerhub ..."
             gqcw.debug "pull command: docker pull ${image}"
-            docker pull ${image} >/dev/null 2>&1 && 
+            docker pull "${image}" >/dev/null 2>&1 && 
             gqcw.info "image pulled from dockerhub: '${image}'"
         ) || (gqcw.info "image not found on dockerhub: '${image}'")
     fi
     gqcw.find_docker_image  "${repository}" "${tag}"
 }
 
-TMPDIR="${TMPDIR}${task}-${$}-${RANDOM}" && mkdir -p ${TMPDIR}
-trap 'rm -rf ${TMPDIR}; exit 0' USR1
-trap 'rm -rf ${TMPDIR}; exit 1' USR2
-trap 's=$?; rm -rf ${TMPDIR}; exit $s' HUP INT TERM EXIT
+TMPDIR="${TMPDIR}${task}-${$}-${RANDOM}" && mkdir -p "${TMPDIR}"
+trap 'gqcw.cleanup 0' USR1
+trap 'gqcw.cleanup 1' USR2 HUP INT TERM
+# trap 'gqcw.cleanup' EXIT
 (
     gqcw.main "$@"
 )

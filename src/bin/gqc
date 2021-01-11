@@ -12,10 +12,10 @@ set -o nounset
 set -o pipefail
 
 export GQC_DEBUG="${GQC_DEBUG:-false}"
-GQC_DEBUG=$(echo "${GQC_DEBUG}" | tr A-Z a-z)
+GQC_DEBUG=$(echo "${GQC_DEBUG}" | tr '[:upper:]' '[:lower:]')
 if [[ "${GQC_DEBUG}" == "true" ]]; then set -xv; fi
 export GQC_DEV="${GQC_DEV:-false}"
-GQC_DEV=$(echo "${GQC_DEV}" | tr A-Z a-z)
+GQC_DEV=$(echo "${GQC_DEV}" | tr '[:upper:]' '[:lower:]')
 export GQC_PID=$$
 
 (( ${BASH_VERSINFO:-0} < 4 )) && (echo "[FATAL] bash version 4 or greater is required" 1>&2; exit 1)
@@ -56,7 +56,7 @@ function cache.__check_function() {
     local func=${f#cache.}
     local retval=
     for f in $(declare -F | awk '{ print $3 }' | grep -E '^cache\.' | sed 's/^cache\.//'); do
-        if [[ ${f} = ${func} ]]; then
+        if [[ "${f}" = "${func}" ]]; then
             retval="${func}"
         fi
     done
@@ -65,26 +65,29 @@ function cache.__check_function() {
 
 function cache.__get() {
     local key="${1:?Need key}"
-    local data_filename=$(cache.get-data-filename "${key}")
+    local data_filename
+    data_filename=$(cache.get-data-filename "${key}")
     [[ -r "${data_filename}" ]] && cat "${data_filename}"
 }
 
 function cache.__put() {
     local key="${1:?Need key}" && shift
-    local data_filename=$(cache.get-data-filename "${key}")
-    local meta_filename=$(cache.get-meta-filename "${key}")
+    local data_filename meta_filename
+    data_filename=$(cache.get-data-filename "${key}")
+    meta_filename=$(cache.get-meta-filename "${key}")
     if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi > "${data_filename}"
 }
 
 function cache.__update-metadata() {
     local key="${1:?Need key}"
-    local id=$(cache.key-to-id "${key}")
-    local data_filename=$(cache.get-data-filename "${key}")
-    local sha1=$(cat "${data_filename}" | hash.sha1 | awk '{print $1}')
-    local sha256=$(cat "${data_filename}" | hash.sha256 | awk '{print $1}')
-    local length=$(cat "${data_filename}" | wc -c)
-    local datetime=$(date --utc "+%Y-%m-%dT%TZ")
-    local user=$(whoami)
+    local data_filename datetime id length sha1 sha256 user
+    id=$(cache.key-to-id "${key}")
+    data_filename=$(cache.get-data-filename "${key}")
+    sha1=$(hash.sha1 <"${data_filename}" | awk '{print $1}')
+    sha256=$(hash.sha256 <"${data_filename}" | awk '{print $1}')
+    length=$(wc -c <"${data_filename}")
+    datetime=$(date --utc "+%Y-%m-%dT%TZ")
+    user=$(whoami)
     cache.__update-meta-key-value "${key}" "key" "${key}"
     cache.__update-meta-key-value "${key}" "id" "${id}"
     cache.__update-meta-key-value "${key}" "modified-at" "${datetime}"
@@ -99,8 +102,9 @@ function cache.__update-meta-key-value() {
     local key="${1:?Need  key}"
     local tag="${2:?Need meta tag}"
     local value="${3:-}"
-    local meta_filename=$(cache.get-meta-filename "${key}")
-    local tmpfile=$(mktemp "${GQC[TASK]}-${GQC[REQUESTID]}-XXXXXXXX.meta.tmp")
+    local meta_filename tmpfile
+    meta_filename=$(cache.get-meta-filename "${key}")
+    tmpfile=$(mktemp "${GQC[TASK]}-${GQC[REQUESTID]}-XXXXXXXX.meta.tmp")
     cache.get-metadata "${key}" | \
         jq --arg k "${tag}" 'del(.[$k])' | \
         jq --arg k "${tag}" --arg v "${value}" '.[$k] = $v' \
@@ -109,13 +113,16 @@ function cache.__update-meta-key-value() {
 }
 
 function cache.append() {
-    local cache_data_filename=$(cache.get-data-filename "${1:?Need key}") && shift
+    local cache_key="${1:?Need key}"
+    local cache_data_filename
+    cache_data_filename=$(cache.get-data-filename "${cache_key}") && shift
     cache.__put "$@" >> "${cache_data_filename}"
     cache.__update-metadata "${cache_key}"
 }
 
 function cache.directory() {
     local result=${GQC[CACHEDIR]}
+    # shellcheck disable=SC2174
     [[ -d "${result}" ]] || mkdir -m 755 -p "${result}"
     [[ -r "${result}" ]] || chmod 755 "${result}"
     echo "${result}"
@@ -123,32 +130,38 @@ function cache.directory() {
 
 function cache.exists() {
     local key="${1:?Need key}"
-    local cache_data_filename=$(cache.get-data-filename "${key}")
-    local cache_meta_filename=$(cache.get-meta-filename "${key}")
+    local cache_data_filename=
+    cache_data_filename=$(cache.get-data-filename "${key}")
+    local cache_meta_filename=
+    cache_meta_filename=$(cache.get-meta-filename "${key}")
     [[ -r "${cache_data_filename}" ]] && [[ -r "${cache_meta_filename}" ]] && \
     [[ -w "${cache_data_filename}" ]] && [[ -w "${cache_meta_filename}" ]]
 }
 
 function cache.get-data-filename() {
     local key="${1:?Need key}"
-    local id=$(cache.key-to-id "${key}")
+    local id
+    id=$(cache.key-to-id "${key}")
     echo "$(cache.directory)/${id}.data"
 }
 
 function cache.get-meta-filename() {
     local key="${1:?Need key}"
-    local id=$(cache.key-to-id "${key}")
+    local id
+    id=$(cache.key-to-id "${key}")
     echo "$(cache.directory)/${id}.meta"
 }
 
 function cache.get() {
     local key="${1:?Need key}"
-    cache.__get "${key}" || (log.error "Key «$key» data file '$(cache.get-data-filename \"${key}\")' can not be read" 1>&2 ; exit 1)
+    # shellcheck disable=SC2174
+    cache.__get "${key}" || (local f; f=$(cache.get-data-filename "${key}"); log.error "Key «$key» data file '${f}' can not be read" 1>&2 ; exit 1)
 }
 
 function cache.get-metadata() {
     local key="${1:?Need key}"
-    local meta_filename=$(cache.get-meta-filename "${key}")
+    local meta_filename
+    meta_filename=$(cache.get-meta-filename "${key}")
     ([[ -r "${meta_filename}" ]] && cat "${meta_filename}") || jq -n '{}'
 }
 
@@ -164,7 +177,8 @@ function cache.key-to-id() {
 
 function cache.put() {
     local key="${1:?Need key}"
-    local data_filename=$(cache.get-data-filename "${key}")
+    local data_filename
+    data_filename=$(cache.get-data-filename "${key}")
     cache.__put "$@" > "${data_filename}"
     cache.__update-metadata "${key}"
 }
@@ -194,12 +208,13 @@ function hash.sha512() {
 }
 
 function locationiq.reverse-geolocate() {
-    local latitude=$(text.trim "${1:?Need latitude}")
-    local longitude=$(text.trim "${2:?Need longitude}")
-    local url=$(locationiq.reverse-geolocate-url "${latitude}" "${longitude}")
+    local error latitude longitude result url
+    latitude=$(text.trim "${1:?Need latitude}")
+    longitude=$(text.trim "${2:?Need longitude}")
+    url=$(locationiq.reverse-geolocate-url "${latitude}" "${longitude}")
     log.debug "reverse-geolocate: lat=${latitude} long=${longitude} url=${url}" > /dev/null
-    local result=$(curl --silent --get "${url}")
-    local error=$(echo "${result}" | jq .error)
+    result=$(curl --silent --get "${url}")
+    error=$(echo "${result}" | jq .error)
     if [[ -n "${error}" ]] && [[ "${error}" != "null" ]]; then
        log.error "reverse geolocate request error: lat='${latitude}', lon='${longitude}' result='${result}' error='${error}'" > /dev/null
        result=
@@ -208,8 +223,9 @@ function locationiq.reverse-geolocate() {
 }
 
 function locationiq.reverse-geolocate-url() {
-    local latitude=$(text.trim "${1:?Need latitude}")
-    local longitude=$(text.trim "${2:?Need longitude}")
+    local latitude longitude
+    longitude=$(text.trim "${1:?Need latitude}")
+    longitude=$(text.trim "${2:?Need longitude}")
     echo "https://${LOCATIONIQ[API_HOST]}/v1/reverse.php?key=${LOCATIONIQ[API_TOKEN]}&lat=${latitude}&lon=${longitude}&format=json"
 }
 
@@ -220,38 +236,38 @@ function log.should-log() {
 }
 
 function log.debug() {
-    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read -r line ; do
         log.log "[DEBUG] $line"
     done
 }
 
 function log.dryrun() {
-    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read -r line ; do
         log.log "[DRYRUN] $line"
     done
 }
 
 function log.error() {
-    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read -r line ; do
         log.log "[ERROR] $line"
     done 1>&2
 }
 
 function log.fatal() {
-    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read -r line ; do
         log.log "[FATAL] $line"
     done 1>&2
     gqc.exit_1
 }
 
 function log.info() {
-    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read -r line ; do
         log.log "[INFO] $line"
     done
 }
 
 function log.log() {
-    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | tee >(log.log-to-logfile) | while read line ; do
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | tee >(log.log-to-logfile "$@") | while read -r line ; do
         if log.should-log "${FUNCNAME[1]}"; then
             echo "${line}"
         fi
@@ -260,26 +276,26 @@ function log.log() {
 
 function log.log-to-logfile() {
     if [[ -n "${LOG[LOGFILE]:-}" ]]; then
-        ([[ -f "${LOG[LOGFILE]}" ]] && [[ -w "${LOG[LOGFILE]}" ]]) ||
-            (mkdir -p $(dirname -- "${LOG[LOGFILE]}") && touch -- "${LOG[LOGFILE]}")
+        [[ ( -f "${LOG[LOGFILE]}" ) && ( -w "${LOG[LOGFILE]}" ) ]] ||
+            (local d; d=$(dirname -- "${LOG[LOGFILE]}"); mkdir -p "${d}" && touch -- "${LOG[LOGFILE]}")
         local rid=
         [[ "${LOG[USE_TIMESTAMP]}" == 'true' ]] && rid="$(date +%Y%m%dT%H%M%S) ${rid}"
         [[ -n "${LOG[REQUESTID]}" ]] && rid="${LOG[REQUESTID]} ${rid} "
-        if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
+        if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read -r line ; do
             echo "${rid}${line}" >> "${LOG[LOGFILE]}"
         done
     fi
 }
 
 function log.warn() {
-    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read line ; do
+    if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | while read -r line ; do
         log.log "[WARN] $line"
     done
 }
 
 function text.canonicalize() {
     if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | \
-        perl -MUnicode::Normalize -lane '# \
+        perl -MUnicode::Normalize -lane '
             use open qw(:std :utf8);
             my $s = NFKD(qq($_));
             $s =~ s/[^[:alpha:]]//g;
@@ -304,34 +320,41 @@ function text.trim() {
 
 function util.readlink_e() {
     local TARGET_FILE=$1
-    cd $(dirname "${TARGET_FILE}")
+    local dir
+    dir=$(dirname "${TARGET_FILE}")
+    cd "${dir}"
     TARGET_FILE=$(basename "${TARGET_FILE}")
     # Iterate down a (possible) chain of symlinks
     while [[ -L "${TARGET_FILE}" ]]; do
         TARGET_FILE=$(readlink "${TARGET_FILE}")
-        cd $(dirname "${TARGET_FILE}")
+        dir=$(dirname "${TARGET_FILE}")
+        cd "${dir}"
         TARGET_FILE=$(basename "${TARGET_FILE}")
     done
     # Compute the canonicalized name by finding the physical path 
     # for the directory we're in and appending the target file.
-    local PHYS_DIR=$(pwd -P)
+    local PHYS_DIR
+    PHYS_DIR=$(pwd -P)
     echo "${PHYS_DIR}/${TARGET_FILE}"
 }
 
 function gqc.initialize() {
-    local prg=$(readlink -e "$0")
-    ([[ -n "${prg}" ]] && [[ -f "${prg}" ]]) || (echo "[FATAL] Cannot locate: '$0'" 1>&2; gqc.exit_1)
-    local task=$(basename -- "$0")
-    local taskdir=$(cd $(dirname -- "$0") > /dev/null && pwd)
-    local tmpdir="${TMPDIR:-/tmp}"
-    local command="${taskdir}/${task} ${*}"
+    local command prg task taskdir tmpdir
+    prg=$(readlink -e "$0")
+    [[ ( -n "${prg}" ) && ( -f "${prg}" ) ]] || (echo "[FATAL] Cannot locate: '$0'" 1>&2; gqc.exit_1)
+    task=$(basename -- "$0")
+    taskdir=$(dirname -- "$0")
+    taskdir=$(cd "${taskdir}" > /dev/null && pwd)
+    tmpdir="${TMPDIR:-/tmp}"
+    command="${taskdir}/${task} ${*}"
     task=${task%%.sh}
 
+    GQC[COMMAND]="${command}"
     GQC[PRG]="${prg}"
     GQC[TASK]="${task}"
     GQC[TASKDIR]="${taskdir}"
-    GQC[COMMAND]="${command}"
-    GQC[REQUESTID]=$(echo "${GQC[TASK]}+$(hostname -f)+$$+$(date -u '+%Y%m%dT%I%M%S')" | hash.sha1 | awk {'print $1'})
+    GQC[TMPDIR]="${tmpdir}"
+    GQC[REQUESTID]=$(echo "${GQC[TASK]}+$(hostname -f)+$$+$(date -u '+%Y%m%dT%I%M%S')" | hash.sha1 | awk '{ print $1 }')
     GQC[CACHEDIR]=${GQC[CACHEDIR]:-/var/cache/selby/${GQC[TASK]}}
 
     LOG[LOGFILE]=${LOG[LOGFILE]:-/var/log/selby/${GQC[TASK]}/$(date '+%Y%m%dT%I%M%S').log}
@@ -339,12 +362,18 @@ function gqc.initialize() {
 
 function gqc.clean-latitude () {
     if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | text.trim | \
-        perl -ne 'chop; $_ =~ /^([+-]?\d{1,3}\.\d+)$/; printf("%.'${GQC[LATITUDE_PRECISION]}'f", $1);'
+        perl -ne 'chop; $_ =~ /^([+-]?\d{1,3}\.\d+)$/; printf("%.'"${GQC[LATITUDE_PRECISION]}"'f", $1);'
 }
 
 function gqc.clean-longitude () {
     if [[ -n ${1+x} ]]; then echo "$@"; else cat -; fi | text.trim | \
-        perl -ne 'chop; $_ =~ /^([+-]?\d{1,3}\.\d+)$/; printf("%.'${GQC[LONGITUDE_PRECISION]}'f", $1);'
+        perl -ne 'chop; $_ =~ /^([+-]?\d{1,3}\.\d+)$/; printf("%.'"${GQC[LONGITUDE_PRECISION]}"'f", $1);'
+}
+
+function gqc.cleanup() {
+    local status=${1:-${?}}
+    rm -rf "${TMPDIR}"
+    exit "${status}"
 }
 
 gqc.copyright() {
@@ -387,14 +416,14 @@ function gqc.get-options() {
     while [[ "${#}" -gt "0" ]]; do
         case ${1} in
         --api-host)
-            LOCATIONIQ[API_HOST]=$(echo "${2}") && shift
+            LOCATIONIQ[API_HOST]="${2}" && shift
             ;;
         --api-token)
-            LOCATIONIQ[API_TOKEN]=$(echo "${2}") && shift
+            LOCATIONIQ[API_TOKEN]="${2}" && shift
             ;;
         -C|--cache-directory)
             local file="${2}" && shift
-            [[ -e "${file}" ]] && (! [[ -w "${file}" ]]) ||  (log.fatal "cache directory can not be written: '${file}'")
+            [[ ( -e "${file}" ) && ( -w "${file}") ]] || log.fatal "cache directory can not be written: '${file}'"
             GQC[CACHEDIR]="${file}"
             ;;
         --copyright)
@@ -437,7 +466,7 @@ function gqc.get-options() {
             GQC[QUIET]=true
             ;;
         -s|--separator)
-            GQC[SEPARATOR]=$(echo "${2}") && shift
+            GQC[SEPARATOR]="${2}" && shift
             [[ ${#GQC[SEPARATOR]} -eq 1 ]] || (log.fatal "illegal separator '${GQC[SEPARATOR]}': expecting one character")
             ;;
         -S|--summarize)
@@ -446,12 +475,12 @@ function gqc.get-options() {
             ;;
         --Xdebug)
             set -xv
-            GQC_XDEBUG=true
-            GQC_DEBUG=true
+            export GQC_XDEBUG=true
+            export GQC_DEBUG=true
             ;;
         --Xdev)
-            GQC_XDEV=true
-            GQC_DEV=true
+            export GQC_XDEV=true
+            export GQC_DEV=true
             ;;
         (--) shift; break
             ;;
@@ -466,10 +495,10 @@ function gqc.get-options() {
 }
 
 function gqc.main() {
-    [[ "${GQC_DEBUG}" == 'true' ]] && echo "gqc.main: $@"
-    gqc.initialize "$@"
-    gqc.get-options "$@"
-    log.debug "gqc.main: $@"
+    [[ "${GQC_DEBUG}" == 'true' ]] && echo "gqc.main: ${*}"
+    gqc.initialize "${@}"
+    gqc.get-options "${@}"
+    log.debug "gqc.main: ${*}"
     log.debug "GQC[PRG]=${GQC[PRG]}"
     log.debug "GQC[TASK]=${GQC[TASK]}"
     log.debug "GQC[TASKDIR]=${GQC[TASKDIR]}"
@@ -497,37 +526,40 @@ function gqc.main() {
     IFS="${GQC[SEPARATOR]}"
     local country state selbyNumber latitude longitude
 
-    cat "${GQC[INPUT]}" | text.trim | while read country state selbyNumber latitude longitude ; do
+    text.trim <"${GQC[INPUT]}" | while read -r country state selbyNumber latitude longitude ; do
         log.debug "raw-record: country='${country}' state='${state}' selbyNumber='${selbyNumber}' latitude='${latitude}' longitude='${longitude}'"
         (echo "${country}" | text.trim | grep -q -E '^\s*#') && continue # Skip comment lines
         (echo "${selbyNumber}" | grep -q -E -v '^[[:digit:]]+$') && continue # Skip if selbyNumber is not a decimal number
-        if ([[ -z "${latitude}" ]] || [[ -z "${longitude}" ]]); then
+        if [[ ( -z "${latitude}" ) || ( -z "${longitude}" ) ]]; then
             log.error "SN-${selbyNumber}: unable to reverse geolocate; missing latitude or longitude"
         else
-            local c_country=$(text.canonicalize "${country}")
-            local c_state=$(text.canonicalize "${state}")
-            local c_latitude=$(gqc.clean-latitude "${latitude}")
-            local c_longitude=$(gqc.clean-latitude "${longitude}")
+            local c_country c_state c_latitude c_longitude response
+            c_country=$(text.canonicalize "${country}")
+            c_state=$(text.canonicalize "${state}")
+            c_latitude=$(gqc.clean-latitude "${latitude}")
+            c_longitude=$(gqc.clean-latitude "${longitude}")
             log.debug "cleaned: c_country='${c_country}' c_state='${c_state}' selbyNumber='${selbyNumber}' c_latitude='${c_latitude}' c_longitude='${c_longitude}'"
-            local response=$(gqc.reverse-geolocate ${c_latitude} ${c_longitude})
+            response=$(gqc.reverse-geolocate "${c_latitude}" "${c_longitude}")
             log.debug "[lat='${c_latitude}', lon='${c_longitude}'] => '${response}'"
             if [[ -z "${response}" ]]; then
                 log.error "SN-${selbyNumber}: reverse geolocate failed [lat='${c_latitude}', lon='${c_longitude}']"
             else
-                local r_country=$(echo "${response}" | jq .address.country | tr -d '"')
-                local r_country_code=$(echo "${response}" | jq .address.country_code | tr -d '"')
-                local r_state=$(echo "${response}" | jq .address.state | tr -d '"')
-                local r_county=$(echo "${response}" | jq .address.county | tr -d '"')
-                local r_city=$(echo "${response}" | jq .address.city | tr -d '"')
-                local r_region=$(echo "${response}" | jq .address.region | tr -d '"')
-                local r_display_name=$(echo "${response}" | jq .display_name | tr -d '"')
-                local c_r_country=$(text.canonicalize "${r_country}")
-                local c_r_country_code=$(text.canonicalize "${r_country_code}")
-                local c_r_state=$(text.canonicalize "${r_state}")
-                local c_r_county=$(text.canonicalize "${r_county}")
-                local c_r_city=$(text.canonicalize "${r_city}")
-                local c_r_region=$(text.canonicalize "${r_region}")
-                log.debug "reverse-geocode: {sn=$selbyNumber, country=\"${c_country}\", div1=\"${c_state}\", lat=${c_latitude}, lon=${c_longitude}} => {country=\"$r_country\", state=\"$r_state\", response=${response}}}"
+                local r_city r_country  r_country_code r_county r_display_name r_region r_state
+                r_city=$(echo "${response}" | jq .address.city | tr -d '"')
+                r_country=$(echo "${response}" | jq .address.country | tr -d '"')
+                r_country_code=$(echo "${response}" | jq .address.country_code | tr -d '"')
+                r_county=$(echo "${response}" | jq .address.county | tr -d '"')
+                r_display_name=$(echo "${response}" | jq .display_name | tr -d '"')
+                r_region=$(echo "${response}" | jq .address.region | tr -d '"')
+                r_state=$(echo "${response}" | jq .address.state | tr -d '"')
+                local c_r_city c_r_country c_r_country_code c_r_county c_r_region c_r_state
+                c_r_city=$(text.canonicalize "${r_city}")
+                c_r_country=$(text.canonicalize "${r_country}")
+                c_r_country_code=$(text.canonicalize "${r_country_code}")
+                c_r_county=$(text.canonicalize "${r_county}")
+                c_r_state=$(text.canonicalize "${r_state}")
+                c_r_region=$(text.canonicalize "${r_region}")
+                log.debug "reverse-geocode: {sn=$selbyNumber, country=\"${c_country}\", div1=\"${c_state}\", lat=${c_latitude}, lon=${c_longitude}} => {country=\"${r_country}\", canonical_country=\"${c_r_country}\", country_code=\"${r_country_code}\", canonical_country_code=\"${c_r_country_code}\", state=\"${r_state}\", canonical_state=\"${c_r_state}\", county=\"${r_county}\", canonical_county=\"${c_r_county}\", city=\"${r_city}\", canonical_city=\"${c_r_city}\", region=\"${r_region}\", canonical_region=\"${c_r_region}\", display_name=\"${r_display_name}\", response=${response}}}"
                 if [[ "${c_r_country}" != "${c_country}" ]]; then
                     log.error "SN-${selbyNumber}: country '${country}' != reverse geocode '${r_country}'"
                 fi
@@ -546,15 +578,16 @@ function gqc.main() {
 }
 
 function gqc.reverse-geolocate() {
-    local latitude=$(text.trim "${1:?Need latitude}")
-    local longitude=$(text.trim "${2:?Need longitude}")
+    local latitude longitude
+    latitude=$(text.trim "${1:?Need latitude}")
+    longitude=$(text.trim "${2:?Need longitude}")
     local usecache="${3:-true}"
     local cachekey="latitude:${latitude},longitude:${longitude}"
     if [[ "${usecache}" == 'true' ]] && cache.exists "${cachekey}"; then
         cache.get "${cachekey}"
     else
-        result=$(locationiq.reverse-geolocate ${latitude} ${longitude})
-        [[ -n "${result}" ]] && [[ "${usecache}" == 'true' ]] && cache.put "${cachekey}" "${result}"
+        result=$(locationiq.reverse-geolocate "${latitude}" "${longitude}")
+        [[ ( -n "${result}" ) && ( "${usecache}" == 'true' ) ]] && cache.put "${cachekey}" "${result}"
         echo "${result}"
     fi
 }
@@ -562,7 +595,7 @@ function gqc.reverse-geolocate() {
 function gqc.summarize-logfile() {
     local logfile=${1:-${LOG[LOGFILE]}}
     [[ -r "${logfile}" ]] && log.info "Summary" && 
-        (cat "${logfile}" | "${GQC[TASKDIR]}/gqc-summarize" | log.info)
+        ("${GQC[TASKDIR]}/gqc-summarize" <"${logfile}" | log.info)
     true
 }
 
@@ -635,9 +668,10 @@ you are doing.
 END_OF_USAGE
 }
 
-trap 'exit 0' USR1
-trap 'exit 1' USR2
-trap 's=$?; exit $s' HUP INT TERM
+TMPDIR="${TMPDIR}${task}-${$}-${RANDOM}" && mkdir -p "${TMPDIR}"
+trap 'gqc.cleanup 0' USR1
+trap 'gqc.cleanup 1' USR2 HUP INT TERM
+# trap 'gqc.cleanup' EXIT
 (
     gqc.main "$@"
 )
