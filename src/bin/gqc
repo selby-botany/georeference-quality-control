@@ -17,6 +17,8 @@ if [[ "${GQC_DEBUG}" == "true" ]]; then set -xv; fi
 export GQC_DEV="${GQC_DEV:-false}"
 GQC_DEV=$(echo "${GQC_DEV}" | tr '[:upper:]' '[:lower:]')
 export GQC_PID=$$
+export GQC_TMPDIR="${TMPDIR:-/tmp}"
+
 
 (( ${BASH_VERSINFO:-0} < 4 )) && (echo "[FATAL] bash version 4 or greater is required" 1>&2; exit 1)
 
@@ -224,7 +226,7 @@ function locationiq.reverse-geolocate() {
 
 function locationiq.reverse-geolocate-url() {
     local latitude longitude
-    longitude=$(text.trim "${1:?Need latitude}")
+    latitude=$(text.trim "${1:?Need latitude}")
     longitude=$(text.trim "${2:?Need longitude}")
     echo "https://${LOCATIONIQ[API_HOST]}/v1/reverse.php?key=${LOCATIONIQ[API_TOKEN]}&lat=${latitude}&lon=${longitude}&format=json"
 }
@@ -343,17 +345,18 @@ function gqc.initialize() {
     prg=$(readlink -e "$0")
     [[ ( -n "${prg}" ) && ( -f "${prg}" ) ]] || (echo "[FATAL] Cannot locate: '$0'" 1>&2; gqc.exit_1)
     task=$(basename -- "$0")
+    task=${task%%.sh}
     taskdir=$(dirname -- "$0")
     taskdir=$(cd "${taskdir}" > /dev/null && pwd)
-    tmpdir="${TMPDIR:-/tmp}"
+    tmpdir=$(mktemp --tmpdir --directory "org.selby.botany.gqc-XXXXXXXX")
     command="${taskdir}/${task} ${*}"
-    task=${task%%.sh}
 
     GQC[COMMAND]="${command}"
     GQC[PRG]="${prg}"
     GQC[TASK]="${task}"
     GQC[TASKDIR]="${taskdir}"
     GQC[TMPDIR]="${tmpdir}"
+    export GQC_TMPDIR="${GQC[TMPDIR]}"
     GQC[REQUESTID]=$(echo "${GQC[TASK]}+$(hostname -f)+$$+$(date -u '+%Y%m%dT%I%M%S')" | hash.sha1 | awk '{ print $1 }')
     GQC[CACHEDIR]=${GQC[CACHEDIR]:-/var/cache/selby/${GQC[TASK]}}
 
@@ -372,7 +375,7 @@ function gqc.clean-longitude () {
 
 function gqc.cleanup() {
     local status=${1:-${?}}
-    rm -rf "${TMPDIR}"
+    [[ ( -n "${GQC_TMPDIR}" ) && ( -d "${GQC_TMPDIR}" ) ]] && rm -rf "${GQC_TMPDIR}"
     exit "${status}"
 }
 
@@ -668,7 +671,6 @@ you are doing.
 END_OF_USAGE
 }
 
-TMPDIR="${TMPDIR}${task}-${$}-${RANDOM}" && mkdir -p "${TMPDIR}"
 trap 'gqc.cleanup 0' USR1
 trap 'gqc.cleanup 1' USR2 HUP INT TERM
 # trap 'gqc.cleanup' EXIT
