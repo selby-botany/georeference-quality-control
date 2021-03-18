@@ -127,3 +127,13 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# CSV data files
+*.csv
+# Log files
+*.log
+
+# Eclipse settings
+.project
+.pydevproject
+
