@@ -1,36 +1,29 @@
 #!/usr/bin/env python3
 
+import certifi
 import configparser
 import csv
 from datetime import datetime
 from geopy import distance
+import errno
 import getopt
 import hashlib
 import http
-import io
 import json
 import logging
 import math
-import os
 import os.path
 import pathlib
-import pprint
-import random
 import re
-import shelve
-import shlex
 import socket
-import string
 import subprocess
 import sys
 import tempfile
 import time
-from datetime import timezone
 import traceback
 import unicodedata
 import urllib.error
 import urllib.request
-import warnings
 
 
 class GQC:
@@ -44,6 +37,10 @@ class GQC:
         ''' Virtually private constructor. '''
         if GQC.__instance != None:
             raise Exception('This class is a singleton!')
+        
+        os.environ['SSL_CERT_FILE'] = os.environ.get('SSL_CERT_FILE', certifi.where())
+        os.environ['REQUESTS_CA_BUNDLE'] = os.environ.get('REQUESTS_CA_BUNDLE', certifi.where())
+        os.environ['REQUESTS_CA_BUNDLE'] = certifi.where()
 
         default = self.get_default_configuration()
         encoding='utf-8'
@@ -52,7 +49,8 @@ class GQC:
         format = '%(asctime)s.%(msecs)d gqc:%(funcName)s:%(lineno)d [%(levelname)s] %(message)s'
                 
         # Inital logging configuration ... will be rest after options processing
-        loglevel = getattr(logging, default['gqc']['log-level'].upper(), 'INFO')
+        # FIXME - implement log-level
+        # loglevel = getattr(logging, default['gqc']['log-level'].upper(), 'INFO')
         logging.basicConfig(filename=default['gqc']['log-file'], encoding=encoding, style=style, format=format, datefmt=datefmt, level=logging.DEBUG)
         inifiles = default['__sys__']['inifiles']
         c = configparser.ConfigParser(default_section='gqc')
@@ -60,13 +58,13 @@ class GQC:
         c = self.configparser_to_dict(c)
         useroptions = self.get_options(argv)
         self.config = {'gqc': {}, 'location-iq': {}, '__sys__': {}}
-        for (s, sv) in default.items():
+        for (s, _) in default.items():
             for (k, v) in default[s].items():
                 self.config[s][k] = v
-        for (s, sv) in c.items():
+        for (s, _) in c.items():
             for (k, v) in c[s].items():
                 self.config[s][k] = v
-        for (s, sv) in useroptions.items():
+        for (s, _) in useroptions.items():
             for (k, v) in useroptions[s].items():
                 self.config[s][k] = v
         logging.debug(f'config: {self.config}')
@@ -211,10 +209,10 @@ class GQC:
         return os.access(pdir, os.W_OK)
 
 
-    def config_value(self, property, section='gqc', default=None):
+    def config_value(self, key, section='gqc', default=None):
         result = default
-        if (section in self.config) and (property in self.config[section]):
-            result = self.config[section][property]
+        if (section in self.config) and (key in self.config[section]):
+            result = self.config[section][key]
         return result
 
 
@@ -230,7 +228,7 @@ class GQC:
         return r
 
 
-    def copyright():
+    def copyright(self):
         return '''
 Geolocation Quality Control (gqc)
 
@@ -284,7 +282,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     else:
                         rawrowstrip = [c.strip() for c in rawrow]
                         # turn the raw array into a dictionary 
-                        row = {k: rawrow[column[k]] for k in ('accession-number', 'country', 'pd1', 'latitude', 'longitude')}
+                        row = {k: rawrowstrip[column[k]] for k in ('accession-number', 'country', 'pd1', 'latitude', 'longitude')}
                         # and go do it ...
                         logging.debug(f'raw-record[{row_number}]: {json.dumps(row)}')
                         result = self.process_row(row)
@@ -334,7 +332,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
     def __geometry_haversine_distance(self, start_latitude, start_longitude, end_latitude, end_longitude):
         # Haversine Algorithm
-        slat, slon, elat, elon = map(radians, map(float, [start_latitude, start_longitude, end_latitude, end_longitude]))
+        slat, slon, elat, elon = map(math.radians, map(float, [start_latitude, start_longitude, end_latitude, end_longitude]))
         # approximate radius of earth in kilometers
         R =  6378.1370 # Per https://web.archive.org/web/20160826200953/http://maia.usno.navy.mil/NSFA/NSFA_cbe.html#EarthRadius2009
         dlon = elon - slon
@@ -418,7 +416,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
     def get_options(self, argv):
         result = {'gqc': {}, 'location-iq': {}}
         try:
-            opts, args = getopt.getopt(argv, 'c:C:hi:L:l:o:s:', [
+            opts, _ = getopt.getopt(argv, 'c:C:hi:L:l:o:s:', [
                                              'api-token=', 
                                              'api-host=',
                                              'cache-file=',
@@ -520,7 +518,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
     def __locationiq_reverse_geolocate_fetch(self, url, wait=True):
         result = False
-        adjust_backoff = False
+        # adjust_backoff = False
         sleep_seconds = self.__backoff_initial_seconds
         logging.debug(f'sleep_seconds={sleep_seconds}')
         while True:
@@ -731,7 +729,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             response['action'] = 'internal-error'
             response['reason'] = f'reverse-geolocate-error~«{exception.strerror}»'
         finally:
-            type, exception, _ = sys.exc_info()
+            _, exception, _ = sys.exc_info()
             if exception:
                 logging.debug(f'reverse-geolocate-exception: {str(type)} {str(exception)}')
                 tb = traceback.format_exception(*sys.exc_info())
@@ -755,10 +753,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         return result
 
 
-    def sysconfig_value(self, property, default=None):
+    def sysconfig_value(self, key, default=None):
         result = default
-        if ('__sys__' in self.config) and (property in self.config['__sys__']):
-            result = self.config['__sys__'][property]
+        if ('__sys__' in self.config) and (key in self.config['__sys__']):
+            result = self.config['__sys__'][key]
         return result
 
     def usage(self):
