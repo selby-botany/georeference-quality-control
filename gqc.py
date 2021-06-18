@@ -46,12 +46,12 @@ class GQC:
         encoding='utf-8'
         datefmt = '%Y%m%dT%H%M%S'
         style = '%'
-        format = '%(asctime)s.%(msecs)d gqc:%(funcName)s:%(lineno)d [%(levelname)s] %(message)s'
+        fmt = '%(asctime)s.%(msecs)d gqc:%(funcName)s:%(lineno)d [%(levelname)s] %(message)s'
                 
         # Inital logging configuration ... will be rest after options processing
         # FIXME - implement log-level
         # loglevel = getattr(logging, default['gqc']['log-level'].upper(), 'INFO')
-        logging.basicConfig(filename=default['gqc']['log-file'], encoding=encoding, style=style, format=format, datefmt=datefmt, level=logging.DEBUG)
+        logging.basicConfig(filename=default['gqc']['log-file'], encoding=encoding, style=style, format=fmt, datefmt=datefmt, level=logging.DEBUG)
         inifiles = default['__sys__']['inifiles']
         c = configparser.ConfigParser(default_section='gqc')
         c.read(inifiles)
@@ -80,7 +80,6 @@ class GQC:
         logging.debug(f'gqc.log-encoding: {self.config_value("log-encoding")}')
         logging.debug(f'gqc.log-file: {self.config_value("log-file")}')
         logging.debug(f'gqc.log-format: {self.config_value("log-format")}')
-        logging.debug(f'gqc.log-format: {self.config_value("log-format")}')
         logging.debug(f'gqc.log-level: {self.config_value("log-level")}')
         logging.debug(f'gqc.longitude-precision: {self.config_value("longitude-precision")}')
         logging.debug(f'gqc.output: {self.config_value("output")}')
@@ -102,7 +101,7 @@ class GQC:
         # Reset the logging config
         logging.basicConfig(force=True,
                             filename=self.config_value("log-file"),
-                            style=style, format=format, datefmt=datefmt, level=loglevel)
+                            style=style, format=fmt, datefmt=datefmt, level=loglevel)
 
         self.__backoff_initial_seconds = float(self.sysconfig_value('backoff-initial-seconds'));
         self.__backoff_growth_factor = float(self.sysconfig_value('backoff-growth-factor'))
@@ -144,7 +143,7 @@ class GQC:
             with open(cachefile, 'r') as filehandle:
                 cache = json.loads(filehandle.read())
         self.__cache = cache
-        logging.debug(f'__cache keys: {self.__cache.keys()}')
+        # logging.debug(f'__cache keys: {self.__cache.keys()}')
 
     def cache_put(self, cachekey, value):
         assert cachekey, f'Missing cachekey'
@@ -163,13 +162,13 @@ class GQC:
 
     def canonicalize_latitude(self, latitude):
         latitude = float(latitude)
-        assert (latitude >= -90 and latitude <= 90), 'latitude not a number between -90 and 90'
+        assert (latitude >= -90 and latitude <= 90), f'latitude {latitude} not a number between -90 and 90'
         return '{0:.{1}f}'.format(latitude, int(self.config_value('latitude-precision')))
 
 
     def canonicalize_longitude(self, longitude):
         longitude = float(longitude)
-        assert (longitude >= -360 and longitude <= 360), 'longitude not a number between -360 and 360'
+        assert (longitude >= -360 and longitude <= 360), f'longitude {longitude} not a number between -360 and 360'
         return '{0:.{1}f}'.format(longitude, int(self.config_value('longitude-precision')))
 
 
@@ -251,11 +250,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
     def execute(self):
         newkeys = ('action', 'reason',
-                   'location-country', 
-                   'location-pd1', 'location-pd2', 'location-pd3', 'location-pd4', 'location-pd5', 
-                   'location-latitude', 'location-longitude', 
-                   'location-error-distance', 'location-bounding-box-error-distances',
-                   )
+                  'location-country', 
+                  'location-pd1', 'location-pd2', 'location-pd3', 'location-pd4', 'location-pd5', 
+                  'location-latitude', 'location-longitude', 
+                  'location-error-distance', 'location-bounding-box-error-distances',
+                  )
         column = self.config_value('column-assignment')
         logging.debug(f'type: {type(column)} column: {column}')
 
@@ -265,10 +264,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                 self.config['gqc']['cache-enabled'] = ''
         except :
             logging.debug(sys.exc_info())
-            logging.warn('unable to connect to reverse geolocation service: runniing in --cache-only mode')
+            logging.warning('unable to connect to reverse geolocation service: runniing in --cache-only mode')
             self.config['gqc']['cache-enabled'] = ''
 
-        with open(self.config_value('output-file'), 'w', newline='') as csv_output:
+        with open(self.config_value('output-file'), 'w', newline='', encoding='utf8') as csv_output:
             writer = csv.writer(csv_output)
             with open(self.config_value('input-file'), newline='') as csv_input:
                 reader = csv.reader(csv_input)
@@ -282,6 +281,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     else:
                         rawrowstrip = [c.strip() for c in rawrow]
                         # turn the raw array into a dictionary 
+                        logging.debug(f'raw-row-strip[{row_number}]: {json.dumps(rawrowstrip)}')
+                        logging.debug(f'column[{row_number}]: {json.dumps(column)}')
+                        
                         row = {k: rawrowstrip[column[k]] for k in ('accession-number', 'country', 'pd1', 'latitude', 'longitude')}
                         # and go do it ...
                         logging.debug(f'raw-record[{row_number}]: {json.dumps(row)}')
@@ -300,7 +302,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                         assert ('location-longitude' in result), f'process-row result missing "longitude": result {result}'
                         assert ('location-error-distance' in result), f'process-row result missing "error-distance": result {result}'
                         assert ('location-bounding-box-error-distances' in result), f'process-row result missing "bounding-box-error-distances": result {result}'
-        
+
                         append = [result['action'], 
                                   result['reason'], 
                                   result['country'], 
@@ -701,11 +703,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                         'longitude-east': self.geometry_distance(canonical_row['latitude'], 
                                                                  canonical_row['longitude'], 
                                                                  canonical_row['latitude'], 
-                                                                 self.canonicalize_latitude(boundingbox['longitude-east'])),
+                                                                 self.canonicalize_longitude(boundingbox['longitude-east'])),
                         'longitude-west': self.geometry_distance(canonical_row['latitude'], 
                                                                  canonical_row['longitude'], 
                                                                  canonical_row['latitude'], 
-                                                                 self.canonicalize_latitude(boundingbox['longitude-west'])),
+                                                                 self.canonicalize_longitude(boundingbox['longitude-west'])),
                         }
                 except:
                     raise
