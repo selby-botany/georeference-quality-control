@@ -252,11 +252,12 @@ class GQC:
                     continue
                 else:
                     raise
-        best = max(matches, key=lambda match: match[0])
-        logging.debug(f'best {best}')
-        if best:
-            response['reason'] = 'coordinate-sign-error'
-            response['note'] = f'suggestion: change location from {i_p} to {best[1]} => {best[2]}'
+        if matches:
+            best = max(matches, key=lambda match: match[0])
+            logging.debug(f'best {best}')
+            if best:
+                response['reason'] = 'coordinate-sign-error'
+                response['note'] = f'suggestion: change location from {i_p} to {best[1]} => {best[2]}'
         return response
 
     def copyright(self):
@@ -768,6 +769,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     logging.debug(f'score ({row[k]}, {rk}) => {score}')
                     if score < self.MIN_FUZZY_SCORE:
                         response = self.correct_typos(row, response)
+                        response['action'] = 'error'
+                        response['reason'] = f'{k}-mismatch'
                         break
 
         except urllib.error.HTTPError as exception:
