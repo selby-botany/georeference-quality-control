@@ -23,7 +23,8 @@ kilometers on a side).
 The quality control check simply compares the location's country and state
 to those provided in the input file and note an error if they do not match. 
 
-After the record is checked it is written out along with several new columns described below.
+After the record is checked it is written out along with several new columns
+described below.
 
 
 ## Usage
@@ -49,10 +50,11 @@ unless the --output option is given.
   -C, --cache-file c           Cache file; defaults to "/Users/jim/.gqc/gqc.reverse-lookup.cache"
       --cache-only             Only read from cache; do not perform reverse geolocation calls
   -c, --column, --column-assignment C:N[,C:N]*
-                               Column assignments. 'C' is one of 'country', 'pd1',
-                               'accession-number', 'latitude' or 'longitude'. 'N' is the
-                               column number starting from 0. Default is
-                               '{'accession-number': 0, 'latitude': 1, 'longitude': 2, 'country': 3, 'pd1': 4}'
+                               Column assignments. 'C' is one of 'country',
+                               'pd1', 'pd2', 'pd3', 'pd4', 'pd5',
+                               'accession-number', 'latitude' or 'longitude'.
+                               'N' is the column number starting from 0.
+                               Default is '{'accession-number': 0, 'latitude': 1, 'longitude': 2, 'country': 3, 'pd1': 4}'
       --comment-character c    All input records starting at any amount of
                                whitespace followed by the comment character will
                                be ignored; defaults character if '#'
@@ -115,7 +117,9 @@ The first row is assumed to be column headings and is ignored.
 
 The default order of columns is, from left to right: `accession-number`, `latitude`,
 `longitude`, `country`, `pd1`. Use the `--column-assignment` option to specify alternate
-column assignments. The input file may contain other unused columns. They are ignored.
+column assignments. To add `pd2`, `pd3`, `pd4` and `pd5` to the set of political
+division columns, use the `--column-assignment` option to give their columns.
+The input file may contain other unused columns. They are ignored.
 
 ### Output File Format
 
@@ -157,6 +161,8 @@ additional columns:
       each giving the distance to the respective bounding box edge. This value
       tells you how "centered" you are with the boundaries of the location.
       </dd>
+  <dt><code>note</code></dt>
+  <dd>Additional information about an error.</dd>
 </dl>
 
 ## Known Issues / TODOs
@@ -173,6 +179,15 @@ additional columns:
     * Initial bash prototype
 * 0.0.2
     * Python prototype with the output file having the qc results appended to the row
+* 0.0.3
+    * Set SSL CAcert location during initialization and cleanup
+* 0.0.4
+    * Mostly fix python warnings
+* 0.0.5
+    * Fix README
+* 0.0.5
+    * Use "fuzzy" matching when comparing political divisions
+    * Check for flipped lat/long signs on country-mismatch
 
 ## Meta
 

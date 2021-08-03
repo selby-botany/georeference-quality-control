@@ -1,40 +1,37 @@
 #!/usr/bin/env python3
 
 import configparser
+import copy
 import csv
 from datetime import datetime
+import errno
+from fuzzywuzzy import fuzz
 from geopy import distance
+from haversine import haversine, Unit
 import getopt
 import hashlib
 import http
-import io
 import json
 import logging
-import math
-import os
 import os.path
 import pathlib
-import pprint
-import random
 import re
-import shelve
-import shlex
 import socket
-import string
 import subprocess
+import ssl
 import sys
 import tempfile
 import time
-from datetime import timezone
-import traceback
 import unicodedata
 import urllib.error
 import urllib.request
-import warnings
 
 
 class GQC:
     '''Geolocation Quality Control (gqc)'''
+
+    SUPER_VERBOSE = False
+    MIN_FUZZY_SCORE = 85
 
     __instance = None
     __backoff_initial_seconds = 1
@@ -45,50 +42,29 @@ class GQC:
         if GQC.__instance != None:
             raise Exception('This class is a singleton!')
 
-        default = self.get_default_configuration()
-        encoding='utf-8'
-        datefmt = '%Y%m%dT%H%M%S'
-        style = '%'
-        format = '%(asctime)s.%(msecs)d gqc:%(funcName)s:%(lineno)d [%(levelname)s] %(message)s'
-                
-        # Inital logging configuration ... will be rest after options processing
-        loglevel = getattr(logging, default['gqc']['log-level'].upper(), 'INFO')
-        logging.basicConfig(filename=default['gqc']['log-file'], encoding=encoding, style=style, format=format, datefmt=datefmt, level=logging.DEBUG)
-        inifiles = default['__sys__']['inifiles']
-        c = configparser.ConfigParser(default_section='gqc')
-        c.read(inifiles)
-        c = self.configparser_to_dict(c)
-        useroptions = self.get_options(argv)
+        logging.captureWarnings(True)
+
         self.config = {'gqc': {}, 'location-iq': {}, '__sys__': {}}
-        for (s, sv) in default.items():
-            for (k, v) in default[s].items():
-                self.config[s][k] = v
-        for (s, sv) in c.items():
-            for (k, v) in c[s].items():
-                self.config[s][k] = v
-        for (s, sv) in useroptions.items():
-            for (k, v) in useroptions[s].items():
-                self.config[s][k] = v
-        logging.debug(f'config: {self.config}')
-        logging.debug(f'gqc.cache-file: {self.config_value("cache-file")}')
-        logging.debug(f'gqc.cache-enabled: {self.config_value("cache-enabled")}')
-        logging.debug(f'gqc.cache-only: {self.config_value("cache-only")}')
-        logging.debug(f'gqc.column-assignment: {self.config_value("column-assignment")}')
-        logging.debug(f'gqc.column-assignment-type: {type(self.config_value("column-assignment"))}')
-        logging.debug(f'gqc.comment-character: {self.config_value("comment-character")}')
-        logging.debug(f'gqc.input: {self.config_value("input")}')
-        logging.debug(f'gqc.latitude-precision: {self.config_value("latitude-precision")}')
-        logging.debug(f'gqc.log-datefmt: {self.config_value("log-datefmt")}')
-        logging.debug(f'gqc.log-encoding: {self.config_value("log-encoding")}')
-        logging.debug(f'gqc.log-file: {self.config_value("log-file")}')
-        logging.debug(f'gqc.log-format: {self.config_value("log-format")}')
-        logging.debug(f'gqc.log-format: {self.config_value("log-format")}')
-        logging.debug(f'gqc.log-level: {self.config_value("log-level")}')
-        logging.debug(f'gqc.longitude-precision: {self.config_value("longitude-precision")}')
-        logging.debug(f'gqc.output: {self.config_value("output")}')
-        logging.debug(f'gqc.input: {self.config_value("separator")}')
-        logging.debug(f'location-iq.api-host: {self.config_value("api-host", section="location-iq")}')
-        logging.debug(f'location-iq.api-token: {self.config_value("api-token", section="location-iq")}')
+        default = self.get_default_configuration()
+        self.config = self.dict_merge(self.config, default)
+
+        # Initial logging configuration ... will be reset after options processing
+        logging.basicConfig(filename=self.config_value('log-file'),
+                            encoding=self.sysconfig_value('logging')['encoding'],
+                            style=self.sysconfig_value('logging')['style'],
+                            format=self.sysconfig_value('logging')['format'],
+                            datefmt=self.sysconfig_value('logging')['datefmt'],
+                            filemode=self.sysconfig_value('logging')['filemode'],
+                            level=getattr(logging, self.config_value('log-level').upper(), getattr(logging, 'DEBUG')))
+
+        inifiles = default['__sys__']['inifiles']
+        iniconfig = configparser.ConfigParser(default_section='gqc')
+        iniconfig.read(inifiles)
+        iniconfig = self.configparser_to_dict(iniconfig)
+        self.config = self.dict_merge(self.config, iniconfig)
+ 
+        useroptions = self.get_options(argv)
+        self.config = self.dict_merge(self.config, useroptions)
 
         try:
             pathlib.Path(os.path.dirname(self.config_value('cache-file'))).mkdir(parents=True, exist_ok=True)
@@ -98,19 +74,35 @@ class GQC:
                 raise
             pass
 
-        # Get the lopging level converted from string to integer
-        loglevel = getattr(logging, self.config_value('log-level').upper(), 'INFO')
-        logging.debug(f'numeric loglevel: {loglevel}')
-        # Reset the logging config
-        logging.basicConfig(force=True,
-                            filename=self.config_value("log-file"),
-                            style=style, format=format, datefmt=datefmt, level=loglevel)
+        logging.basicConfig(filename=self.config_value('log-file'),
+                            encoding=self.sysconfig_value('logging')['encoding'],
+                            style=self.sysconfig_value('logging')['style'],
+                            format=self.sysconfig_value('logging')['format'],
+                            datefmt=self.sysconfig_value('logging')['datefmt'],
+                            level=getattr(logging, self.config_value('log-level').upper(), getattr(logging, 'INFO')))
 
         self.__backoff_initial_seconds = float(self.sysconfig_value('backoff-initial-seconds'));
         self.__backoff_growth_factor = float(self.sysconfig_value('backoff-growth-factor'))
         self.__backoff_learning_factor = float(self.sysconfig_value('backoff-learning-factor'))
 
         self.cache_load()
+
+        logging.debug(f'config: {self.config}')
+        logging.debug(f'gqc.cache-file: {self.config_value("cache-file")}')
+        logging.debug(f'gqc.cache-enabled: {self.config_value("cache-enabled")}')
+        logging.debug(f'gqc.cache-only: {self.config_value("cache-only")}')
+        logging.debug(f'gqc.column-assignment: {self.config_value("column-assignment")}')
+        logging.debug(f'gqc.input: {self.config_value("input")}')
+        logging.debug(f'gqc.latitude-precision: {self.config_value("latitude-precision")}')
+        logging.debug(f'gqc.log-datefmt: {self.config_value("log-datefmt")}')
+        logging.debug(f'gqc.log-encoding: {self.config_value("log-encoding")}')
+        logging.debug(f'gqc.log-file: {self.config_value("log-file")}')
+        logging.debug(f'gqc.log-level: {self.config_value("log-level")}')
+        logging.debug(f'gqc.longitude-precision: {self.config_value("longitude-precision")}')
+        logging.debug(f'gqc.output: {self.config_value("output")}')
+        logging.debug(f'gqc.input: {self.config_value("separator")}')
+        logging.debug(f'location-iq.api-host: {self.config_value("api-host", section="location-iq")}')
+        logging.debug(f'location-iq.api-token: {self.config_value("api-token", section="location-iq")}')
 
         return
 
@@ -123,11 +115,8 @@ class GQC:
     def cache_exists(self, cachekey):
         assert cachekey, f'Missing cachekey'
         result = (cachekey in self.__cache)
-        if result:
-            logging.debug(f'key «{cachekey}» => result «{result}»')
-        else:
-            logging.debug(f'key «{cachekey}» => result «{result}» ; __cache {self.__cache.keys()}')
-        return result;
+        logging.debug(f'key «{cachekey}» => result «{result}»')
+        return result
 
 
     def cache_get(self, cachekey):
@@ -136,7 +125,7 @@ class GQC:
         if 'value' in result:
             result = result['value']
         logging.debug(f'key «{cachekey}» => result «{result}»')
-        return result;
+        return result
 
 
     def cache_load(self):
@@ -146,13 +135,12 @@ class GQC:
             with open(cachefile, 'r') as filehandle:
                 cache = json.loads(filehandle.read())
         self.__cache = cache
-        logging.debug(f'__cache keys: {self.__cache.keys()}')
 
     def cache_put(self, cachekey, value):
         assert cachekey, f'Missing cachekey'
         self.__cache[cachekey] = {'creation-time': datetime.utcnow().strftime('%Y%m%dT%H%M%S'), 'value': value }
         self.cache_dump()
-        logging.debug(f'(key «{cachekey}» <= value «{self.__cache[cachekey]})» ; __cache {self.__cache.keys()}')
+        logging.debug(f'(key «{cachekey}» <= value «{self.__cache[cachekey]})»')
 
 
     def canonicalize_alpha_element(self, element):
@@ -165,14 +153,14 @@ class GQC:
 
     def canonicalize_latitude(self, latitude):
         latitude = float(latitude)
-        assert (latitude >= -90 and latitude <= 90), 'latitude not a number between -90 and 90'
-        return '{0:.{1}f}'.format(latitude, int(self.config_value('latitude-precision')))
+        assert (latitude >= -90 and latitude <= 90), f'latitude "{latitude}" is not a number between -90 and 90'
+        return float('{0:.{1}f}'.format(latitude, int(self.config_value('latitude-precision'))))
 
 
     def canonicalize_longitude(self, longitude):
         longitude = float(longitude)
-        assert (longitude >= -360 and longitude <= 360), 'longitude not a number between -360 and 360'
-        return '{0:.{1}f}'.format(longitude, int(self.config_value('longitude-precision')))
+        assert (longitude >= -360 and longitude <= 360), f'longitude "{longitude}" not a number between -360 and 360'
+        return float('{0:.{1}f}'.format(longitude, int(self.config_value('longitude-precision'))))
 
 
     def check_dir_writable(self, dnm):
@@ -211,10 +199,10 @@ class GQC:
         return os.access(pdir, os.W_OK)
 
 
-    def config_value(self, property, section='gqc', default=None):
+    def config_value(self, prop, section='gqc', default=None):
         result = default
-        if (section in self.config) and (property in self.config[section]):
-            result = self.config[section][property]
+        if (section in self.config) and (prop in self.config[section]):
+            result = self.config[section][prop]
         return result
 
 
@@ -230,7 +218,48 @@ class GQC:
         return r
 
 
-    def copyright():
+    def correct_typos(self, inrow, response):
+        logging.debug(f'inrow {inrow}')
+        assert 'latitude' in inrow, f'missing "latitude" element'
+        assert 'longitude' in inrow, f'missing "longitude" element'
+        logging.debug(f'response {response}')
+        # First look for reversed signs
+        permutations = [(1, -1), (-1, 1), (-1, -1)]
+        columns = self.get_location_columns()
+        # convenience variables
+        i_p = (self.canonicalize_latitude(inrow['latitude']), self.canonicalize_longitude(inrow['longitude']))
+        # the input political devisions in descending order
+        i_pd = {c:inrow[c] for c in columns}
+        # the list of locations tuples to try
+        locations = [(float(p[0])*float(i_p[0]), float(p[1])*float(i_p[1])) for p in permutations]
+        # dictionary mapping each location tuple with it's distance from the input location
+        matches = []
+        for l in locations:
+            try:
+                reverse = self.reverse_geolocate(l[0], l[1], usecache=True, wait=False)
+                reverse_pds = self.extract_reverse_location(reverse['address'])
+                reverse_pds_zip = list(zip(i_pd.values(), reverse_pds.values()))
+                logging.debug(f'reverse_pds_zip {reverse_pds_zip}')
+                scores = [fuzz.token_set_ratio(r[0],r[1]) for r in reverse_pds_zip]
+                logging.debug(f'scores {scores}')
+                pdmatches = list(map(lambda x: 1 if x >= self.MIN_FUZZY_SCORE else 0, scores))
+                logging.debug(f'pdmatches {pdmatches}')
+                nmatch = pdmatches.index(0) if pdmatches.count(0) > 0 else len(pdmatches)
+                if nmatch > 0:
+                    matches.append((nmatch, l, reverse_pds))
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    continue
+                else:
+                    raise
+        best = max(matches, key=lambda match: match[0])
+        logging.debug(f'best {best}')
+        if best:
+            response['reason'] = 'coordinate-sign-error'
+            response['note'] = f'suggestion: change location from {i_p} to {best[1]} => {best[2]}'
+        return response
+
+    def copyright(self):
         return '''
 Geolocation Quality Control (gqc)
 
@@ -251,23 +280,40 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 '''
 
 
+    def dict_merge(self, a, b):
+        '''recursively merges dict's. not just simple a['key'] = b['key'], if
+        both a and b have a key who's value is a dict then dict_merge is called
+        on both values and the result stored in the returned dictionary.'''
+        if not isinstance(b, dict):
+            return b
+        result = copy.deepcopy(a)
+        for k, v in b.items():
+            if k in result and isinstance(result[k], dict):
+                    result[k] = self.dict_merge(result[k], v)
+            else:
+                result[k] = copy.deepcopy(v)
+        return result
+
+
     def execute(self):
+        inputkeys = ('accession-number', 'country', 'pd1', 'latitude', 'longitude')
         newkeys = ('action', 'reason',
                    'location-country', 
                    'location-pd1', 'location-pd2', 'location-pd3', 'location-pd4', 'location-pd5', 
                    'location-latitude', 'location-longitude', 
-                   'location-error-distance', 'location-bounding-box-error-distances',
+                   'location-error-distance', 'location-bounding-box', 'location-bounding-box-error-distances',
+                   'note'
                    )
-        column = self.config_value('column-assignment')
-        logging.debug(f'type: {type(column)} column: {column}')
+        columns = self.get_active_columns()
+        logging.debug(f'columns: {columns}')
 
         try:
             if not self.reverse_geolocate(latitude=0, longitude=0, usecache=False, wait=False):
-                logging.warn('unable to connect to reverse geolocation service: runniing in --cache-only mode')
+                logging.warning('unable to connect to reverse geolocation service: running in --cache-only mode')
                 self.config['gqc']['cache-enabled'] = ''
         except :
             logging.debug(sys.exc_info())
-            logging.warn('unable to connect to reverse geolocation service: runniing in --cache-only mode')
+            logging.warning('unable to connect to reverse geolocation service: running in --cache-only mode')
             self.config['gqc']['cache-enabled'] = ''
 
         with open(self.config_value('output-file'), 'w', newline='') as csv_output:
@@ -276,73 +322,52 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                 reader = csv.reader(csv_input)
                 row_number = 0
                 for rawrow in reader:
-                    logging.debug(f'raw-row[{row_number}]: {json.dumps(rawrow)}')
-                    append = []
+                    logging.debug(f'rawrow[{row_number}]: {json.dumps(rawrow)}')
+                    row = [''] * len(rawrow)
+                    append = [''] * len(newkeys)
                     if row_number == 0:
                         # header row
                         append = list(newkeys)
                     else:
-                        rawrowstrip = [c.strip() for c in rawrow]
-                        # turn the raw array into a dictionary 
-                        row = {k: rawrow[column[k]] for k in ('accession-number', 'country', 'pd1', 'latitude', 'longitude')}
-                        # and go do it ...
-                        logging.debug(f'raw-record[{row_number}]: {json.dumps(row)}')
+                        row = {k: rawrow[columns[k]] for k in inputkeys}
+                        logging.debug(f'row[{row_number}]: {json.dumps(row)}')
                         result = self.process_row(row)
-                        logging.debug(f'result[{row_number}] {json.dumps(result)}')
-
-                        assert ('action' in result), f'process-row result missing an "action": result {result}'
-                        assert ('reason' in result), f'process-row result missing a "reason": result {result}'
-                        assert ('country' in result), f'process-row result missing "reason": result {result}'
-                        assert ('pd1' in result), f'process-row result missing "pd1": result {result}'
-                        assert ('pd2' in result), f'process-row result missing "pd2": result {result}'
-                        assert ('pd3' in result), f'process-row result missing "pd3": result {result}'
-                        assert ('pd4' in result), f'process-row result missing "pd4": result {result}'
-                        assert ('pd5' in result), f'process-row result missing "pd5": result {result}'
-                        assert ('location-latitude' in result), f'process-row result missing "latitude": result {result}'
-                        assert ('location-longitude' in result), f'process-row result missing "longitude": result {result}'
-                        assert ('location-error-distance' in result), f'process-row result missing "error-distance": result {result}'
-                        assert ('location-bounding-box-error-distances' in result), f'process-row result missing "bounding-box-error-distances": result {result}'
-        
-                        append = [result['action'], 
-                                  result['reason'], 
-                                  result['country'], 
-                                  result['pd1'], 
-                                  result['pd2'], 
-                                  result['pd3'], 
-                                  result['pd4'], 
-                                  result['pd5'], 
-                                  result['location-latitude'],
-                                  result['location-longitude'],
-                                  result['location-error-distance'],
-                                  result['location-bounding-box-error-distances'],
-                                  ]
-                    r = rawrow + append
-                    logging.info(f'result[{row_number}] {r}')
-                    writer.writerow(r)
-
+                        logging.debug(f'process-row-result[{row_number}] {json.dumps(result)}')
+                        for k in newkeys:
+                            assert (k in result), f'process-row result missing an "{k}": result {result}'
+                        append = [result[k] for k in newkeys]
+                    logging.debug(f'row[{row_number}]: {json.dumps(row)}')
+                    logging.debug(f'append[{row_number}]: {json.dumps(append)}')
+                    result = rawrow + append
+                    logging.info(f'result[{row_number}] {result}')
+                    writer.writerow(result)
                     row_number += 1
 
         logging.info('That''s all folks!')
 
 
+    def extract_reverse_location(self, address):
+        result = {}
+        result['country'] = address['country'] if 'country' in address else ''
+        result['pd1'] = address ['state'] if 'state' in address else ''
+        result['pd2'] = address['county'] if 'county' in address else ''
+        result['pd3'] = address['city'] if 'city' in address else ''
+        result['pd4'] = address['suburb'] if 'suburb' in address else ''
+        result['pd5'] = address['neighbourhood'] if 'neighbourhood' in address else ''
+        return dict(result)
+
+
     def geometry_distance(self, start_latitude, start_longitude, end_latitude, end_longitude):
-        result = self.__geometry_geodesic_distance(start_latitude, start_longitude, end_latitude, end_longitude)
+        result = self.__geometry_haversine_distance(start_latitude, start_longitude, end_latitude, end_longitude)
         return self.geometry_canonicalize_kilometers(result)
+
 
     def __geometry_geodesic_distance(self, start_latitude, start_longitude, end_latitude, end_longitude):
         return distance.distance((start_latitude, start_longitude), (end_latitude, end_longitude)).km
 
-    def __geometry_haversine_distance(self, start_latitude, start_longitude, end_latitude, end_longitude):
-        # Haversine Algorithm
-        slat, slon, elat, elon = map(radians, map(float, [start_latitude, start_longitude, end_latitude, end_longitude]))
-        # approximate radius of earth in kilometers
-        R =  6378.1370 # Per https://web.archive.org/web/20160826200953/http://maia.usno.navy.mil/NSFA/NSFA_cbe.html#EarthRadius2009
-        dlon = elon - slon
-        dlat = elat - slat
-        a = math.sin(dlat / 2)**2 + math.cos(slat) * math.cos(elat) * math.sin(dlon / 2)**2
-        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-        result = R * c
-        return result
+
+    def __geometry_haversine_distance(self, start_latitude: float, start_longitude: float, end_latitude: float, end_longitude: float) -> float:
+        return haversine((start_latitude, start_longitude), (end_latitude, end_longitude), unit=Unit.KILOMETERS)
 
 
     def geometry_canonicalize_kilometers(self, distance):
@@ -353,6 +378,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         return float('{0:.{1}f}'.format(float(latlon),
                                         max(int(self.config_value('latitude-precision')), 
                                             int(self.config_value('longitude-precision')))))
+
+
+    def get_active_columns(self):
+        return {k:v for k,v in self.config_value('column-assignment').items() if v >= 0}
 
 
     def get_default_configuration(self):
@@ -369,7 +398,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                 'cache-enabled': 'true',    # disabled by '' (empty string)
                 'cache-only': '',   # enabled by 'true'
                 'cache-file': f'{taskdotdir}/gqc.reverse-lookup.cache',
-                'column-assignment': { 'accession-number': 0, 'latitude': 1, 'longitude': 2, 'country': 3, 'pd1': 4, },
+                'column-assignment': { 'country': 0,
+                                       'pd1': 1,
+                                       'pd2': -1,
+                                       'pd3': -1,
+                                       'pd4': -1,
+                                       'pd5': -1,
+                                       'accession-number': 2,
+                                       'latitude': 3, 
+                                       'longitude': 4
+                                     },
                 'comment-character': '#',
                 'input-file': '/dev/stdin',
                 'latitude-precision': 3,
@@ -410,15 +448,30 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                 'taskdotdir': taskdotdir,
                 'tmpdir': tempfile.mkdtemp(prefix='org.selby.botany.gqc.'),
                 'working-directory': os.getcwd(),
+                'logging' : {
+                    'encoding': 'utf-8',
+                    'datefmt': '%Y%m%dT%H%M%S',
+                    'style': '%',
+                    'format': '%(asctime)s.%(msecs)d gqc:%(funcName)s:%(lineno)d [%(levelname)s] %(message)s',
+                    'filemode': 'a'
+                }
             }
         }
         return result
 
 
+    def get_location_columns(self):
+        result = []
+        for k in self.get_active_columns().keys():
+            if re.search("^(country|pd[12345])$", k):
+                result.append(k)
+        return sorted(result)
+
+
     def get_options(self, argv):
         result = {'gqc': {}, 'location-iq': {}}
         try:
-            opts, args = getopt.getopt(argv, 'c:C:hi:L:l:o:s:', [
+            opts, _args = getopt.getopt(argv, 'c:C:hi:L:l:o:s:', [
                                              'api-token=', 
                                              'api-host=',
                                              'cache-file=',
@@ -450,10 +503,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     result['gqc']['cache-enabled'] = 'true'
                     result['gqc']['cache-only'] = 'true'
                 elif opt in {'-c', '--column', '--column-assignment'}:
-                    regex = re.compile('^(?:(accession-number|latitude|longitude|country|pd1):(\d+),)*(accession-number|latitude|longitude|country|pd1):(\d+)$')
+                    regex = re.compile('^(?:(accession-number|latitude|longitude|country|pd[1-5]):(\d+),)*(accession-number|latitude|longitude|country|pd[12345]):(\d+)$')
                     if not regex.match(arg): raise ValueError(f'Bad column-assignment value: {arg}')
                     assignments = {a[0]: int(a[1]) for a in [p.split(':') for p in arg.split(',')]}
-                    result['gqc']['column-assignment'] = assignments
+                    result['gqc']['column-assignment'] = self.dict_merge(self.config['gqc']['column-assignment'], assignments)
                 elif opt in {'--comment-character'}:
                     result['gqc']['comment-character'] = arg
                 elif opt in {'--copyright'}:
@@ -519,10 +572,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
     def __locationiq_reverse_geolocate_fetch(self, url, wait=True):
+        ssl._create_default_https_context = ssl._create_unverified_context
         result = False
-        adjust_backoff = False
+        _adjust_backoff = False
         sleep_seconds = self.__backoff_initial_seconds
         logging.debug(f'sleep_seconds={sleep_seconds}')
+
         while True:
             try:
                 logging.debug(f'urlopen «{url}»')
@@ -568,29 +623,25 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         assert 'pd1' in row, f'missing "pd1" element'
         assert 'latitude' in row, f'missing "latitude" element'
         assert 'longitude' in row, f'missing "longitude" element'
-        
-        response = {
-            'action': '',
-            'reason': '',
-            'accession-number': row['accession-number'],
-            'location-bounding-box': '',
-            'location-bounding-box-error-distances': '',
-            'country': '',
-            'pd1': '',
-            'pd2': '',
-            'pd3': '',
-            'pd4': '',
-            'pd5': '',
-            'location-latitude': '',
-            'location-longitude': '',
-            'display-name': '',
-            'location-error-distance': '',
-            'raw-row': row,
-            'canonical-row': '',
-            'reverse-geolocate-response': '',
-         }
+        logging.debug(f'row {row}')
+
+        responsekeys = ['action', 'reason', 'accession-number',
+                        'location-bounding-box',
+                        'location-bounding-box-error-distances',
+                        'location-country', 'location-pd1', 'location-pd2', 'location-pd3', 'location-pd4', 'location-pd5',
+                        'location-latitude', 'location-longitude',
+                        'display-name', 'location-error-distance',
+                        'reverse-geolocate-response', 'note',]
+        # Init response
+        response = {k: '' for k in responsekeys}
+        response['action'] = 'pass'
+        response['reason'] = 'matching-location'
+
+        columns = self.get_active_columns()
+        logging.debug(f'columns {columns}')
 
         row = {k: str(v).strip() for k,v in row.items()}
+        logging.debug(f'row {row}')
 
         stringified_row = ''.join(row.values())
         if stringified_row == '':
@@ -607,7 +658,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             response['reason'] = f'no-accession-number'
         if not row['accession-number'].isdecimal():
             response['action'] = 'ignore'
-            response['reason'] = f'accession-number-not-decimal-integer~«{row["accession-number"]}»'
+            response['reason'] = f'accession-number-not-integer'
+            response['note' ] = '«{row["accession-number"]}» should be a decimal integer'
             return response
 
         if not (row['latitude'] or row['longitude']):
@@ -623,11 +675,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             latitude = float(row['latitude'])
             if latitude < -90.0 or latitude > 90.0:
                 response['action'] = 'error'
-                response['reason'] = f'latitude-range-error~«{latitude}»'
+                response['reason'] = f'latitude-range-error'
+                response['note' ] = '«{row["latitude"]}» cannot not be less than -90 or greater then +90'
                 return response
         except ValueError:
             response['action'] = 'ignore'
-            response['reason'] = f'latitude-number-not-decimal-float~«{row["latitude"]}»'
+            response['reason'] = f'latitude-number-not-decimal-float'
+            response['note' ] = '«{row["latitude"]}» must be a floating point (real) number'
             return response
 
         if not row['longitude']:
@@ -638,20 +692,22 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             longitude = float(row['longitude'])
             if longitude < -360.0 or longitude > 360.0:
                 response['action'] = 'error'
-                response['reason'] = f'longitude-range-error~«{row["longitude"]}»'
+                response['reason'] = f'longitude-range-error'
+                response['note' ] = '«{row["longitude"]}» cannot not be less than -360 or greater then +360'
                 return response
         except ValueError:
             response['action'] = 'ignore'
-            response['reason'] = f'longitude-number-not-decimal-float~«{row["longitude"]}»'
+            response['reason'] = f'longitude-number-not-decimal-float'
+            response['note' ] = '«{row["longitude"]}» must be a floating point (real) number'
             return response
 
         canonical_row = {}
         try:
-            canonical_row['country'] = self.canonicalize_alpha_element(row['country'])
-            canonical_row['pd1'] = self.canonicalize_alpha_element(row['pd1'])
+            for k in self.get_location_columns():
+                canonical_row[k] = self.canonicalize_alpha_element(row[k])
             canonical_row['latitude'] = self.canonicalize_latitude(row['latitude'])
             canonical_row['longitude'] = self.canonicalize_longitude(row['longitude'])
-        except ValueError as exception:
+        except ValueError as _:
             response['action'] = 'ignore'
             response['reason'] = f'canonicalize-error'
             return response
@@ -662,14 +718,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             response['reverse-geolocate-response'] = location
             response['action'] = 'error';
             response['accession-number'] = int(row['accession-number'])
-            response['canonical-row'] = canonical_row
-            address = location['address']
-            response['country'] = address['country'] if 'country' in address else ''
-            response['pd1'] = address ['state'] if 'state' in address else ''
-            response['pd2'] = address['county'] if 'county' in address else ''
-            response['pd3'] = address['city'] if 'city' in address else ''
-            response['pd4'] = address['suburb'] if 'suburb' in address else ''
-            response['pd5'] = address['neighbourhood'] if 'neighbourhood' in address else ''
+            response['canonical-input-row'] = canonical_row
+            if 'address' in location:
+                revloc = self.extract_reverse_location(location['address'])
+                logging.debug(f'revloc {revloc}')
+                for k,v in revloc.items():
+                    response[f'location-{k}'] = v
             response['location-latitude'] = self.geometry_canonicalize_latlon(location['lat']) if 'lat' in location else ''
             response['location-longitude'] = self.geometry_canonicalize_latlon(location['lon']) if 'lon' in location else ''
             response['display-name'] = location['display_name'] if 'display_name' in location else ''
@@ -682,7 +736,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                                                self.canonicalize_longitude(response['location-longitude'])))
                 except:
                     raise
-                #    pass
 
             boundingbox = dict(zip(['latitude-south', 'latitude-north', 'longitude-east', 'longitude-west', ], location['boundingbox']))
             response['location-bounding-box'] = boundingbox
@@ -690,36 +743,32 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                 boundingbox['latitude-north'] and
                 boundingbox['longitude-east'] and
                 boundingbox['longitude-west']): 
-                try:
-                    response['location-bounding-box-error-distances'] = {
-                        'latitude-north': self.geometry_distance(canonical_row['latitude'], 
-                                                                 canonical_row['longitude'], 
-                                                                 self.canonicalize_latitude(boundingbox['latitude-north']), 
-                                                                 canonical_row['longitude']),
-                        'latitude-south': self.geometry_distance(canonical_row['latitude'],
-                                                                 canonical_row['longitude'], 
-                                                                 self.canonicalize_latitude(boundingbox['latitude-south']), 
-                                                                 canonical_row['longitude']),
-                        'longitude-east': self.geometry_distance(canonical_row['latitude'], 
-                                                                 canonical_row['longitude'], 
-                                                                 canonical_row['latitude'], 
-                                                                 self.canonicalize_latitude(boundingbox['longitude-east'])),
-                        'longitude-west': self.geometry_distance(canonical_row['latitude'], 
-                                                                 canonical_row['longitude'], 
-                                                                 canonical_row['latitude'], 
-                                                                 self.canonicalize_latitude(boundingbox['longitude-west'])),
-                        }
-                except:
-                    raise
-                    #    pass
-
-            if canonical_row['country'] != self.canonicalize_alpha_element(response['country']):
-                response['reason'] = 'country-mismatch' if not response['reason'] else '; country-mismatch'
-            elif canonical_row['pd1'] != self.canonicalize_alpha_element(response['pd1']):
-                response['reason'] = 'pd1-mismatch' if not response['reason'] else '; pd1-mismatch'
-            else:
-                response['action'] = 'pass'
-                response['reason'] = 'matching-country-and-pd1'
+                response['location-bounding-box-error-distances'] = {
+                    'latitude-north': self.geometry_distance(canonical_row['latitude'], 
+                                                             canonical_row['longitude'], 
+                                                             self.canonicalize_latitude(boundingbox['latitude-north']), 
+                                                             canonical_row['longitude']),'cou n'
+                    'latitude-south': self.geometry_distance(canonical_row['latitude'],
+                                                             canonical_row['longitude'], 
+                                                             self.canonicalize_latitude(boundingbox['latitude-south']), 
+                                                             canonical_row['longitude']),
+                    'longitude-east': self.geometry_distance(canonical_row['latitude'], 
+                                                             canonical_row['longitude'], 
+                                                             canonical_row['latitude'], 
+                                                             self.canonicalize_longitude(boundingbox['longitude-east'])),
+                    'longitude-west': self.geometry_distance(canonical_row['latitude'], 
+                                                             canonical_row['longitude'], 
+                                                             canonical_row['latitude'], 
+                                                             self.canonicalize_longitude(boundingbox['longitude-west'])),
+                    }
+            for k in self.get_location_columns():
+                rk = response[f'location-{k}']
+                if canonical_row[k] != self.canonicalize_alpha_element(rk):
+                    score = fuzz.token_set_ratio(row[k], rk)
+                    logging.debug(f'score ({row[k]}, {rk}) => {score}')
+                    if score < self.MIN_FUZZY_SCORE:
+                        response = self.correct_typos(row, response)
+                        break
 
         except urllib.error.HTTPError as exception:
             response['action'] = 'internal-error'
@@ -727,19 +776,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         except urllib.error.URLError as exception:
             response['action'] = 'internal-error'
             response['reason'] = f'reverse-geolocate-error~«{exception.reason}»'
-        except OSError as exception:
+        except Exception as exception:
+            reason = str(exception)
+            logging.exception(f'reverse-geolocate-error~«{reason}»')
             response['action'] = 'internal-error'
-            response['reason'] = f'reverse-geolocate-error~«{exception.strerror}»'
-        finally:
-            type, exception, _ = sys.exc_info()
-            if exception:
-                logging.debug(f'reverse-geolocate-exception: {str(type)} {str(exception)}')
-                tb = traceback.format_exception(*sys.exc_info())
-                for line in tb:
-                    logging.debug(line.strip())
-        logging.debug(f'response ({canonical_row["latitude"]}, {canonical_row["longitude"]}) => {response}')
+            response['reason'] = f'reverse-geolocate-error~«{reason}»'
+            
+        logging.debug(f'response (row {row} ({canonical_row["latitude"]}, {canonical_row["longitude"]})) => {response}')
         return response
-
 
     def reverse_geolocate(self, latitude, longitude, usecache=None, wait=True):
         if usecache is None:
@@ -755,10 +799,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         return result
 
 
-    def sysconfig_value(self, property, default=None):
+    def sysconfig_value(self, prop, default=None):
         result = default
-        if ('__sys__' in self.config) and (property in self.config['__sys__']):
-            result = self.config['__sys__'][property]
+        if ('__sys__' in self.config) and (prop in self.config['__sys__']):
+            result = self.config['__sys__'][prop]
         return result
 
     def usage(self):
@@ -784,9 +828,9 @@ unless the --output option is given.
   -C, --cache-file c           Cache file; defaults to "{defaults['gqc']['cache-file']}"
       --cache-only             Only read from cache; do not perform reverse geolocation calls
   -c, --column, --column-assignment C:N[,C:N]*
-                               Column assignments. 'C' is one of 'country', 'pd1',
-                               'accession-number', 'latitude' or 'longitude'. 'N' is the
-                               column number starting from 0. Default is
+                               Column assignments. 'C' is one of 'country', 'pd1', 'pd2', 'pd3',
+                               'pd4', 'pd5', 'accession-number', 'latitude' or 'longitude'. 'N'
+                               is the column number starting from 0. Default is
                                '{defaults['gqc']['column-assignment']}'
       --comment-character c    All input records starting at any amount of
                                whitespace followed by the comment character will
