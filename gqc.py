@@ -774,16 +774,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                         break
 
         except urllib.error.HTTPError as exception:
-            response['action'] = 'internal-error'
-            response['reason'] = f'reverse-geolocate-error~«({exception.code}) {exception.reason}»'
+            response['action'] = f'internal-error'
+            response['reason'] = f'reverse-geolocate-error'
+            response['note'] = f'HTTP error «({exception.code}) {exception.reason}»'
         except urllib.error.URLError as exception:
-            response['action'] = 'internal-error'
-            response['reason'] = f'reverse-geolocate-error~«{exception.reason}»'
+            response['action'] = f'internal-error'
+            response['reason'] = f'reverse-geolocate-error'
+            response['note'] = f'error «{exception.reason}»'
         except Exception as exception:
             reason = str(exception)
             logging.exception(f'reverse-geolocate-error~«{reason}»')
-            response['action'] = 'internal-error'
-            response['reason'] = f'reverse-geolocate-error~«{reason}»'
+            response['action'] = f'internal-error'
+            response['reason'] = f'reverse-geolocate-error'
+            response['note'] = f'error «{exception.reason}»'
             
         logging.debug(f'response (row {row} ({canonical_row["latitude"]}, {canonical_row["longitude"]})) => {response}')
         return response
