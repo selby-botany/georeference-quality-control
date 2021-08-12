@@ -498,61 +498,61 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                                              'output=',
                                              'separator='])
             for opt, arg in opts:
-                if opt in {'--api-token'}:
+                if opt in ['--api-token']:
                     result['location-iq']['api-token'] = arg
-                elif opt in {'--api-host'}:
+                elif opt in ['--api-host']:
                     result['location-iq']['api-host'] = arg
-                elif opt in {'-C', '--cache-file'}:
+                elif opt in ['-C', '--cache-file']:
                     path = os.path.realpath(arg)
                     if not self.check_file_writable(path): raise ValueError(f'Can not write to cache file: {path}')
                     result['gqc']['cache-file'] = path
-                elif opt in {'--cache-only'}:
+                elif opt in ['--cache-only']:
                     result['gqc']['cache-enabled'] = 'true'
                     result['gqc']['cache-only'] = 'true'
-                elif opt in {'-c', '--column', '--column-assignment'}:
+                elif opt in ['-c', '--column', '--column-assignment']:
                     regex = re.compile('^(?:(accession-number|latitude|longitude|country|pd[1-5]):(\d+),)*(accession-number|latitude|longitude|country|pd[12345]):(\d+)$')
                     if not regex.match(arg): raise ValueError(f'Bad column-assignment value: {arg}')
                     assignments = {a[0]: int(a[1]) for a in [p.split(':') for p in arg.split(',')]}
                     result['gqc']['column-assignment'] = self.dict_merge(self.config['gqc']['column-assignment'], assignments)
-                elif opt in {'--comment-character'}:
+                elif opt in ['--comment-character']:
                     result['gqc']['comment-character'] = arg
-                elif opt in {'--copyright'}:
+                elif opt in ['--copyright']:
                     print(self.copyright())
                     sys.exit()
-                elif opt in {'--disable-cache'}:
+                elif opt in ['--disable-cache']:
                     result['gqc']['cache-enabled'] = ''
-                elif opt in {'--enable-cache'}:
+                elif opt in ['--enable-cache']:
                     result['gqc']['cache-enabled'] = 'true'
-                elif opt in {'-h', '--help'}:
+                elif opt in ['-h', '--help']:
                     print(self.usage())
                     sys.exit()
                 elif opt in ['-f', '--header', '--first-line-is-header']:
                     result['gqc']['first-line-is-header'] = True
-                elif opt in {'-i', '--input', '--input-file'}:
+                elif opt in ['-i', '--input', '--input-file']:
                     path = os.path.realpath(arg)
                     if not self.check_file_readable(path): raise ValueError(f'Can not read input file: {path}')
                     result['gqc']['input-file'] = path
-                elif opt in {'--latitude-precision'}:
+                elif opt in ['--latitude-precision']:
                     if not (arg.isdigit() and int(arg) >= 0): raise ValueError(f'latitude-precision must be an integer > 0: {arg}')
                     result['gqc']['latitude-precision'] = arg
-                elif opt in {'-L', '--log-file'}:
+                elif opt in ['-L', '--log-file']:
                     path = os.path.realpath(arg)
                     if not self.check_file_writable(path): raise ValueError(f'Can not write to log file: {path}')
                     result['gqc']['log-file'] = path
-                elif opt in {'-l', '--log-level'}:
+                elif opt in ['-l', '--log-level']:
                     l = getattr(logging, arg.upper(), None)
                     if not isinstance(l, int): raise ValueError(f'Invalid log level: {arg}')
                     result['gqc']['log-level'] = arg
-                elif opt in {'--longitude-precision'}:
+                elif opt in ['--longitude-precision']:
                     if not (arg.isdigit() and int(arg) >= 0): raise ValueError(f'longitude-precision must be an integer > 0: {arg}')
                     result['gqc']['longitude-precision'] = arg
                 elif opt in ['-n', '--noheader', '--no-header']:
                     result['gqc']['first-line-is-header'] = False
-                elif opt in {'-o', '--output', '--output-file'}:
+                elif opt in ['-o', '--output', '--output-file']:
                     path = os.path.realpath(arg)
                     if not self.check_file_writable(path): raise ValueError(f'Can not write to output file: {path}')
                     result['gqc']['output-file'] = path
-                elif opt in {'-s', '--separator'}:
+                elif opt in ['-s', '--separator']:
                     result['gqc']['separator'] = arg
                 else:
                     assert False, f'unhandled option: {opt}'
