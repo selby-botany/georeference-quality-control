@@ -890,7 +890,7 @@ Near the equator the approximate resolution corresponding to different precision
 
 if __name__ == '__main__':
     try:
-        GQC.instance(sys.argv[1:]).execute()
+        sys.exit(GQC.instance(sys.argv[1:]).execute())
     except KeyboardInterrupt as _:
         pass
 
