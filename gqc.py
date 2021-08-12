@@ -92,6 +92,7 @@ class GQC:
         logging.debug(f'gqc.cache-enabled: {self.config_value("cache-enabled")}')
         logging.debug(f'gqc.cache-only: {self.config_value("cache-only")}')
         logging.debug(f'gqc.column-assignment: {self.config_value("column-assignment")}')
+        logging.debug(f'gqc.column-assignment: {self.config_value("first-line-is-header")}')
         logging.debug(f'gqc.input: {self.config_value("input")}')
         logging.debug(f'gqc.latitude-precision: {self.config_value("latitude-precision")}')
         logging.debug(f'gqc.log-datefmt: {self.config_value("log-datefmt")}')
@@ -326,7 +327,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     logging.debug(f'rawrow[{row_number}]: {json.dumps(rawrow)}')
                     row = [''] * len(rawrow)
                     append = [''] * len(newkeys)
-                    if row_number == 0:
+                    if ((row_number == 0) and self.config_value("first-line-is-header")):
                         # header row
                         append = list(newkeys)
                     else:
@@ -410,6 +411,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                                        'longitude': 4
                                      },
                 'comment-character': '#',
+                'first-line-is-header': True,
                 'input-file': '/dev/stdin',
                 'latitude-precision': 3,
                 'log-file': f'{taskdotdir}/log/{timestamp}.log',
@@ -472,7 +474,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
     def get_options(self, argv):
         result = {'gqc': {}, 'location-iq': {}}
         try:
-            opts, _args = getopt.getopt(argv, 'c:C:hi:L:l:o:s:', [
+            opts, _args = getopt.getopt(argv, 'c:C:fhi:L:l:no:s:', [
                                              'api-token=', 
                                              'api-host=',
                                              'cache-file=',
@@ -483,12 +485,16 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                                              'copyright',
                                              'disable-cache'
                                              'enable-cache'
+                                             'first-line-is-header',
+                                             'header',
                                              'help',
                                              'input=',
                                              'latitude-precision=',
                                              'log-file=',
                                              'log-level=',
                                              'longitude-precision=',
+                                             'noheader',
+                                             'no-header',
                                              'output=',
                                              'separator='])
             for opt, arg in opts:
@@ -520,6 +526,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                 elif opt in {'-h', '--help'}:
                     print(self.usage())
                     sys.exit()
+                elif opt in ['-f', '--header', '--first-line-is-header']:
+                    result['gqc']['first-line-is-header'] = True
                 elif opt in {'-i', '--input', '--input-file'}:
                     path = os.path.realpath(arg)
                     if not self.check_file_readable(path): raise ValueError(f'Can not read input file: {path}')
@@ -538,6 +546,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                 elif opt in {'--longitude-precision'}:
                     if not (arg.isdigit() and int(arg) >= 0): raise ValueError(f'longitude-precision must be an integer > 0: {arg}')
                     result['gqc']['longitude-precision'] = arg
+                elif opt in ['-n', '--noheader', '--no-header']:
+                    result['gqc']['first-line-is-header'] = False
                 elif opt in {'-o', '--output', '--output-file'}:
                     path = os.path.realpath(arg)
                     if not self.check_file_writable(path): raise ValueError(f'Can not write to output file: {path}')
@@ -842,6 +852,10 @@ unless the --output option is given.
                                whitespace followed by the comment character will
                                be ignored; defaults character if '{defaults['gqc']['comment-character']}'
       --copyright              Display the copyright and exit
+  -f, --first-line-is-header   Treat the first row of the input file as a header -- the
+                               second line of the input file is the first record
+                               processed.
+      --header
   -h, --help                   Display this help and exit
   -i, --input file             Input file; defaults to {defaults['gqc']['input-file']}
       --latitude-precision p   Number of fractional digits of precision in latitude;
@@ -852,6 +866,7 @@ unless the --output option is given.
                                defaults to {defaults['gqc']['log-level']}
       --longitude-precision p  Number of fractional digits of precision in
                                longitude; defaults to {defaults['gqc']['longitude-precision']}
+  -n, --noheader, --no-header  Treat the first row of the input file as data -- not as a header
   -o, --output file            Output file; defaults to {defaults['gqc']['output-file']}
   -s, --separator s            Field separator; defaults to '{defaults['gqc']['separator']}'
       --                       Terminates the list of options
