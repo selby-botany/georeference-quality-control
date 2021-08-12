@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+
+# set -xv
+
+
+function __check() {
+    local data=${1:-''}
+    local columns=${2-'country:0,pd1:1,accession-number:2,latitude:3,longitude:4'}
+    local maxcolumn=$(echo "${columns}" | \
+                      sed -rE 's/^[^0-9]*|[^0-9]*$//' | \
+                      sed 's/[^0-9]*/\n/g' | \
+                      sort -r | head -1)
+    local output=$(([[ -z "${data}" ]] && cat /dev/stdin) || echo "${data}" | \
+                   python3 ./gqc.py --no-header -c "${columns}")
+    local s=$?
+    local rf=$(($maxcolumn+2))
+    local result=$(echo ${output} | cut -d, -f${rf}-)
+    echo "«${data}» => «${result}»"
+    return ${s}
+}
+
+
+# Simple positive test case
+function test-bolivia-pass-47568() {
+    # from 2021-04-28/2021-04-28--bolivia.original.csv
+    __check "Bolivia,La Paz,47568,-16.633333,-67.25"
+}
+
+
+# Tests fuzzy country name match: Jamaica == Jamaika
+function test-caribbean-country-mismatch-101721() {
+    # from 2021-04-28--caribbean.results.csv
+    __check 'Caribbean,Jamaica,Clarendon,101721,18.167479,-77.329748' \
+            'country:1,pd1:2,accession-number:3,latitude:4,longitude:5'
+}
+
+
+# Tests fuzzy country name match: Bahamas == The Bahamas
+function test-caribbean-country-mismatch-20057() {
+    # from 2021-04-28--caribbean.results.csv
+    __check 'Caribbean,Bahamas,North Andros,20057,24.897342,-77.933323' \
+            'country:1,pd1:2,accession-number:3,latitude:4,longitude:5'
+}
+
+
+# Tests ability to detect a flipped sign on longitude
+function test-colombia-country-mismatch-48822() {
+    # from 2021-04-28/2021-04-28--colombia--1.original.csv
+    __check 'Colombia,Antioquia,48822,6.329973,75.647688' | grep '«error,coordinate-sign-error,'
+}
+
+
+# Simple positive test case
+function test-malawi-pass-23666() {
+    # from 2021-04-28/2021-04-28--africa.original.csv
+    __check 'Africa,Eastern Africa,Malawi,Mzimba,23666,-11.839238,33.800995' \
+            'country:2,pd1:3,accession-number:4,latitude:5,longitude:6'
+}
+
+
+# Tests ability to detect a flipped sign on latitude
+function test-peru-country-mismatch-32050() {
+    # from 2021-04-28--peru.results.csv
+    __check 'Peru,Loreto,32050,3.828372,-73.375512' | grep '«error,coordinate-sign-error,'
+}
+
+
+# Tests fuzzy matching of country 'United States' vs. 'United States of America'
+function test-usa-country-mismatch-112841() {
+    # from 2021-04-28/2021-04-28--us.original.csv
+    __check 'United States,Florida,112841,25.984375,-81.725459'
+}
+
+
+
+
+
+
+function z-test-asia-pd1-mismatch-55720() {
+    # from 2021-04-28--asia.results.csv
+    __check 'Asia,South-Eastern Asia,Brunei,Temburong,55720,4.303602,115.332264' \
+            'country:2,pd1:3,accession-number:4,latitude:5,longitude:6'
+}
+
+
+# Tests an (currently) unrecoverable error -- same number erroneously c&p into lat and long
+function z-test-panama-country-mismatch-13735() {
+    # from 2021-04-28/2021-04-28--panama.original.csv
+    __check 'Panama,Veraguas,13735,8.604155,8.604155'
+#    output=$(echo ${data} | python3 ./gqc.py --no-header -c 'country:0,pd1:1,accession-number:2,latitude:3,longitude:4' | grep -i ',error,country-mismatch,Nigeria')
+#    s=$? ; echo "«${data}» => «$(echo ${output} | cut -d, -f6-)»"; return $s
+}
+
+
+# Tests workaround for special administrative districts
+function skip-test-taiwan-pd1-mismatch-112079() {
+    # from 2021-04-28--asia.original.csv
+    data="Asia,Eastern Asia,Republic of China Taiwan,T'ai-pei,112079,25.162478,121.52402"
+    output=$(echo ${data} | python3 ./gqc.py --no-header -c 'country:2,pd1:3,accession-number:4,latitude:5,longitude:6')
+    s=$? ; echo "«${data}» => «$(echo ${output} | cut -d, -f8-)»"; return $s
+}
+
+
+
+function run-tests() {
+    status=0
+    for test in $(declare -F | awk '{ print $3 }' | grep '^test-'); do
+        result=$(${test})
+        s=$?
+        r='FAIL'
+        if [[ ${s} -eq 0 ]]; then
+            r='PASS'
+        fi
+        echo "${r}: ${test}: ${result}"
+        status=$(($status && $s))
+    done
+    exit $status
+}
+
+run-tests
+
