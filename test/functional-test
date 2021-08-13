@@ -20,6 +20,13 @@ function __check() {
 }
 
 
+function fixme-test-asia-pd1-mismatch-55720() {
+    # from 2021-04-28--asia.results.csv
+    __check 'Asia,South-Eastern Asia,Brunei,Temburong,55720,4.303602,115.332264' \
+            'country:2,pd1:3,accession-number:4,latitude:5,longitude:6'
+}
+
+
 # Simple positive test case
 function test-bolivia-pass-47568() {
     # from 2021-04-28/2021-04-28--bolivia.original.csv
@@ -44,7 +51,7 @@ function test-caribbean-country-mismatch-20057() {
 
 
 # Tests ability to detect a flipped sign on longitude
-function test-colombia-country-mismatch-48822() {
+function fixme-test-colombia-country-mismatch-48822() {
     # from 2021-04-28/2021-04-28--colombia--1.original.csv
     __check 'Colombia,Antioquia,48822,6.329973,75.647688' | grep '«error,coordinate-sign-error,'
 }
@@ -55,6 +62,15 @@ function test-malawi-pass-23666() {
     # from 2021-04-28/2021-04-28--africa.original.csv
     __check 'Africa,Eastern Africa,Malawi,Mzimba,23666,-11.839238,33.800995' \
             'country:2,pd1:3,accession-number:4,latitude:5,longitude:6'
+}
+
+
+# Tests an (currently) unrecoverable error -- same number erroneously c&p into lat and long
+function fixme-test-panama-country-mismatch-13735() {
+    # from 2021-04-28/2021-04-28--panama.original.csv
+    __check 'Panama,Veraguas,13735,8.604155,8.604155'
+#    output=$(echo ${data} | python3 ./gqc.py --no-header -c 'country:0,pd1:1,accession-number:2,latitude:3,longitude:4' | grep -i ',error,country-mismatch,Nigeria')
+#    s=$? ; echo "«${data}» => «$(echo ${output} | cut -d, -f6-)»"; return $s
 }
 
 
@@ -72,28 +88,8 @@ function test-usa-country-mismatch-112841() {
 }
 
 
-
-
-
-
-function z-test-asia-pd1-mismatch-55720() {
-    # from 2021-04-28--asia.results.csv
-    __check 'Asia,South-Eastern Asia,Brunei,Temburong,55720,4.303602,115.332264' \
-            'country:2,pd1:3,accession-number:4,latitude:5,longitude:6'
-}
-
-
-# Tests an (currently) unrecoverable error -- same number erroneously c&p into lat and long
-function z-test-panama-country-mismatch-13735() {
-    # from 2021-04-28/2021-04-28--panama.original.csv
-    __check 'Panama,Veraguas,13735,8.604155,8.604155'
-#    output=$(echo ${data} | python3 ./gqc.py --no-header -c 'country:0,pd1:1,accession-number:2,latitude:3,longitude:4' | grep -i ',error,country-mismatch,Nigeria')
-#    s=$? ; echo "«${data}» => «$(echo ${output} | cut -d, -f6-)»"; return $s
-}
-
-
 # Tests workaround for special administrative districts
-function skip-test-taiwan-pd1-mismatch-112079() {
+function fixme-test-taiwan-pd1-mismatch-112079() {
     # from 2021-04-28--asia.original.csv
     data="Asia,Eastern Asia,Republic of China Taiwan,T'ai-pei,112079,25.162478,121.52402"
     output=$(echo ${data} | python3 ./gqc.py --no-header -c 'country:2,pd1:3,accession-number:4,latitude:5,longitude:6')

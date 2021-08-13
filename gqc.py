@@ -219,7 +219,12 @@ class GQC:
         return r
 
 
-    def correct_typos(self, inrow, response):
+    def correct_typos(self, inrow, _response):
+        result = self.correct_sign_swap_typos(inrow, _response)
+        return result
+
+
+    def correct_sign_swap_typos(self, inrow, response):
         logging.debug(f'inrow {inrow}')
         assert 'latitude' in inrow, f'missing "latitude" element'
         assert 'longitude' in inrow, f'missing "longitude" element'
@@ -236,8 +241,9 @@ class GQC:
         # dictionary mapping each location tuple with it's distance from the input location
         matches = []
         for l in locations:
-            try:
-                reverse = self.reverse_geolocate(l[0], l[1], usecache=True, wait=False)
+            logging.debug(f'location {l}')
+            reverse = self.reverse_geolocate(l[0], l[1], usecache=True, wait=False)
+            if reverse:
                 reverse_pds = self.extract_reverse_location(reverse['address'])
                 reverse_pds_zip = list(zip(i_pd.values(), reverse_pds.values()))
                 logging.debug(f'reverse_pds_zip {reverse_pds_zip}')
@@ -248,18 +254,16 @@ class GQC:
                 nmatch = pdmatches.index(0) if pdmatches.count(0) > 0 else len(pdmatches)
                 if nmatch > 0:
                     matches.append((nmatch, l, reverse_pds))
-            except urllib.error.HTTPError as e:
-                if e.code == 404:
-                    continue
-                else:
-                    raise
         if matches:
             best = max(matches, key=lambda match: match[0])
             logging.debug(f'best {best}')
             if best:
+                response['action'] = f'error'
                 response['reason'] = 'coordinate-sign-error'
                 response['note'] = f'suggestion: change location from {i_p} to {best[1]} => {best[2]}'
+        logging.debug(f'response {response}')
         return response
+
 
     def copyright(self):
         return '''
@@ -575,16 +579,18 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         url = self.locationiq_reverse_geolocate_url(latitude, longitude)
         logging.debug(f'request lat={latitude} long={longitude} url={url}')
         # FIXME: Break this down and do error checking
-        result = json.loads(self.__locationiq_reverse_geolocate_fetch(url, wait))
+        result = self.__locationiq_reverse_geolocate_fetch(url, wait)
         logging.debug(f'response lat={latitude} long={longitude} result={result}')
-        if 'error' in result:
-            raise RuntimeError(json.dumps(result))
+        if result:
+            result = json.loads(result)
+            if 'error' in result:
+                raise RuntimeError(json.dumps(result))
         return result
 
 
     def __locationiq_reverse_geolocate_fetch(self, url, wait=True):
         ssl._create_default_https_context = ssl._create_unverified_context
-        result = False
+        result = '{}'
         _adjust_backoff = False
         sleep_seconds = self.__backoff_initial_seconds
         logging.debug(f'sleep_seconds={sleep_seconds}')
@@ -603,6 +609,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     time.sleep(sleep_seconds)
                     sleep_seconds *= self.__backoff_growth_factor
                     logging.debug(f'new-sleep-seconds-after-backoff={sleep_seconds}')
+                elif exception.code == http.HTTPStatus.NOT_FOUND:
+                    return '{}'
                 else:
                     raise
         if not self.__backoff_initial_seconds == sleep_seconds:
@@ -748,7 +756,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                 except:
                     raise
 
-            boundingbox = dict(zip(['latitude-south', 'latitude-north', 'longitude-east', 'longitude-west', ], location['boundingbox']))
+            boundingbox = dict(zip(['latitude-south', 'latitude-north', 'longitude-east', 'longitude-west'], (location['boundingbox'] if 'boundingbox' in location else [''] * 4)))
             response['location-bounding-box'] = boundingbox
             if (boundingbox['latitude-south'] and
                 boundingbox['latitude-north'] and
@@ -758,7 +766,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     'latitude-north': self.geometry_distance(canonical_row['latitude'], 
                                                              canonical_row['longitude'], 
                                                              self.canonicalize_latitude(boundingbox['latitude-north']), 
-                                                             canonical_row['longitude']),'cou n'
+                                                             canonical_row['longitude']),
                     'latitude-south': self.geometry_distance(canonical_row['latitude'],
                                                              canonical_row['longitude'], 
                                                              self.canonicalize_latitude(boundingbox['latitude-south']), 
@@ -772,16 +780,20 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                                                              canonical_row['latitude'], 
                                                              self.canonicalize_longitude(boundingbox['longitude-west'])),
                     }
+            imatch = []
+            rmatch = []
             for k in self.get_location_columns():
                 rk = response[f'location-{k}']
-                if canonical_row[k] != self.canonicalize_alpha_element(rk):
-                    score = fuzz.token_set_ratio(row[k], rk)
-                    logging.debug(f'score ({row[k]}, {rk}) => {score}')
-                    if score < self.MIN_FUZZY_SCORE:
-                        response = self.correct_typos(row, response)
-                        response['action'] = 'error'
-                        response['reason'] = f'{k}-mismatch'
-                        break
+                imatch.append(row[k])
+                rmatch.append(rk)
+                score = fuzz.token_set_ratio(row[k], rk)
+                logging.debug(f'score ({row[k]}, {rk}) => {score}')
+                if score < self.MIN_FUZZY_SCORE:
+                    response['action'] = 'error'
+                    response['reason'] = f'{k}-mismatch'
+                    response['note'] = f'input location «{imatch}» ({canonical_row["latitude"]}, {canonical_row["longitude"]}) does not match response location ({self.canonicalize_latitude(response["location-latitude"])}, {self.canonicalize_latitude(response["location-longitude"])}) «{imatch}»'
+                    response = self.correct_typos(row, response)
+                    break
 
         except urllib.error.HTTPError as exception:
             response['action'] = f'internal-error'
@@ -796,7 +808,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             logging.exception(f'reverse-geolocate-error~«{reason}»')
             response['action'] = f'internal-error'
             response['reason'] = f'reverse-geolocate-error'
-            response['note'] = f'error «{exception.reason}»'
+            response['note'] = f'error «{exception}»'
             
         logging.debug(f'response (row {row} ({canonical_row["latitude"]}, {canonical_row["longitude"]})) => {response}')
         return response
