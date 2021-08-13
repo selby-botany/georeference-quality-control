@@ -101,6 +101,46 @@ class GQC:
             return float('{0:.{1}f}'.format(longitude, self.longitude_precision))
 
 
+    class Validate:
+        @staticmethod
+        def dir_writable(self, dnm):
+            if os.path.exists(dnm):
+                # path exists
+                if os.path.isdir(dnm): # is it a file or a dir?
+                    # also works when dir is a link and the target is writable
+                    return os.access(dnm, os.W_OK)
+                else:
+                    return False # path is a file, so cannot write as a dir
+            # target does not exist, check perms on parent dir
+            pdir = os.path.dirname(dnm)
+            if not pdir: pdir = '.'
+            # target is creatable if parent dir is writable
+            return os.access(pdir, os.W_OK)
+    
+    
+        @staticmethod
+        def file_readable(self, filename):
+            if os.path.exists(filename) and os.path.isfile(filename):
+                return os.access(filename, os.R_OK)
+            return False
+    
+    
+        @staticmethod
+        def file_writable(self, filename):
+            if os.path.exists(filename):
+                # path exists
+                if os.path.isfile(filename): # is it a file or a dir?
+                    # also works when file is a link and the target is writable
+                    return os.access(filename, os.W_OK)
+                else:
+                    return False # path is a dir, so cannot write as a file
+            # target does not exist, check perms on parent dir
+            pdir = os.path.dirname(filename)
+            if not pdir: pdir = '.'
+            # target is creatable if parent dir is writable
+            return os.access(pdir, os.W_OK)
+
+
     def __init__(self, argv):
         ''' Virtually private constructor. '''
         if GQC.__instance != None:
@@ -173,42 +213,6 @@ class GQC:
         logging.debug(f'location-iq.api-token: {self.config_value("api-token", section="location-iq")}')
 
         return
-
-    def check_dir_writable(self, dnm):
-        if os.path.exists(dnm):
-            # path exists
-            if os.path.isdir(dnm): # is it a file or a dir?
-                # also works when dir is a link and the target is writable
-                return os.access(dnm, os.W_OK)
-            else:
-                return False # path is a file, so cannot write as a dir
-        # target does not exist, check perms on parent dir
-        pdir = os.path.dirname(dnm)
-        if not pdir: pdir = '.'
-        # target is creatable if parent dir is writable
-        return os.access(pdir, os.W_OK)
-
-
-    def check_file_readable(self, filename):
-        if os.path.exists(filename) and os.path.isfile(filename):
-            return os.access(filename, os.R_OK)
-        return False
-
-
-    def check_file_writable(self, filename):
-        if os.path.exists(filename):
-            # path exists
-            if os.path.isfile(filename): # is it a file or a dir?
-                # also works when file is a link and the target is writable
-                return os.access(filename, os.W_OK)
-            else:
-                return False # path is a dir, so cannot write as a file
-        # target does not exist, check perms on parent dir
-        pdir = os.path.dirname(filename)
-        if not pdir: pdir = '.'
-        # target is creatable if parent dir is writable
-        return os.access(pdir, os.W_OK)
-
 
     def config_value(self, prop, section='gqc', default=None):
         result = default
@@ -518,7 +522,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     result['location-iq']['api-host'] = arg
                 elif opt in ['-C', '--cache-file']:
                     path = os.path.realpath(arg)
-                    if not self.check_file_writable(path): raise ValueError(f'Can not write to cache file: {path}')
+                    if not GQC.Validate.file_writable(path): raise ValueError(f'Can not write to cache file: {path}')
                     result['gqc']['cache-file'] = path
                 elif opt in ['--cache-only']:
                     result['gqc']['cache-enabled'] = 'true'
@@ -544,14 +548,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     result['gqc']['first-line-is-header'] = True
                 elif opt in ['-i', '--input', '--input-file']:
                     path = os.path.realpath(arg)
-                    if not self.check_file_readable(path): raise ValueError(f'Can not read input file: {path}')
+                    if not GQC.Validate.file_readable(path): raise ValueError(f'Can not read input file: {path}')
                     result['gqc']['input-file'] = path
                 elif opt in ['--latitude-precision']:
                     if not (arg.isdigit() and int(arg) >= 0): raise ValueError(f'latitude-precision must be an integer > 0: {arg}')
                     result['gqc']['latitude-precision'] = arg
                 elif opt in ['-L', '--log-file']:
                     path = os.path.realpath(arg)
-                    if not self.check_file_writable(path): raise ValueError(f'Can not write to log file: {path}')
+                    if not GQC.Validate.file_writable(path): raise ValueError(f'Can not write to log file: {path}')
                     result['gqc']['log-file'] = path
                 elif opt in ['-l', '--log-level']:
                     l = getattr(logging, arg.upper(), None)
@@ -564,7 +568,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     result['gqc']['first-line-is-header'] = False
                 elif opt in ['-o', '--output', '--output-file']:
                     path = os.path.realpath(arg)
-                    if not self.check_file_writable(path): raise ValueError(f'Can not write to output file: {path}')
+                    if not GQC.Validate.file_writable(path): raise ValueError(f'Can not write to output file: {path}')
                     result['gqc']['output-file'] = path
                 elif opt in ['-s', '--separator']:
                     result['gqc']['separator'] = arg
