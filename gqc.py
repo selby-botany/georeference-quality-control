@@ -66,6 +66,29 @@ class Cache:
         logging.debug(f'(key «{cachekey}» <= value «{self.__cache[cachekey]})»')
 
 
+class Canonicalize:
+    def __init__(self, latitude_precision, longitude_precision):
+        self.latitude_precision = latitude_precision
+        self.longitude_precision = longitude_precision
+
+    def alpha_element(self, element):
+        regex = re.compile('[^a-zA-Z]')
+        e = regex.sub('', unicodedata.normalize('NFKD', str(element)).lower().strip().replace(' ', ''))
+        if e == 'null': e = ''
+        logging.debug(f'element «{element}» => «{e}»')
+        return e
+
+    def latitude(self, latitude):
+        latitude = float(latitude)
+        assert (latitude >= -90 and latitude <= 90), f'latitude "{latitude}" is not a number between -90 and 90'
+        return float('{0:.{1}f}'.format(latitude, self.latitude_precision))
+
+    def longitude(self, longitude):
+        longitude = float(longitude)
+        assert (longitude >= -360 and longitude <= 360), f'longitude "{longitude}" not a number between -360 and 360'
+        return float('{0:.{1}f}'.format(longitude, self.longitude_precision))
+
+
 class Config:
     SECTION_GQC = 'gqc'
     SECTION_LOCATIONIQ = 'location-iq'
@@ -214,7 +237,6 @@ class Geometry:
     def geodesic_distance(self, start_latitude, start_longitude, end_latitude, end_longitude):
         return distance.distance((start_latitude, start_longitude), (end_latitude, end_longitude)).km
 
-
     def haversine_distance(self, start_latitude: float, start_longitude: float, end_latitude: float, end_longitude: float) -> float:
         return haversine((start_latitude, start_longitude), (end_latitude, end_longitude), unit=Unit.KILOMETERS)
 
@@ -289,30 +311,6 @@ class GQC:
     MIN_FUZZY_SCORE = 85
 
     __instance = None
-
-
-    class Canonicalize:
-        def __init__(self, gqc):
-            self.gqc = gqc
-            self.latitude_precision = int(self.gqc.config.get('latitude-precision'))
-            self.longitude_precision = int(self.gqc.config.get('longitude-precision'))
-
-        def alpha_element(self, element):
-            regex = re.compile('[^a-zA-Z]')
-            e = regex.sub('', unicodedata.normalize('NFKD', str(element)).lower().strip().replace(' ', ''))
-            if e == 'null': e = ''
-            logging.debug(f'element «{element}» => «{e}»')
-            return e
-    
-        def latitude(self, latitude):
-            latitude = float(latitude)
-            assert (latitude >= -90 and latitude <= 90), f'latitude "{latitude}" is not a number between -90 and 90'
-            return float('{0:.{1}f}'.format(latitude, self.latitude_precision))
-    
-        def longitude(self, longitude):
-            longitude = float(longitude)
-            assert (longitude >= -360 and longitude <= 360), f'longitude "{longitude}" not a number between -360 and 360'
-            return float('{0:.{1}f}'.format(longitude, self.longitude_precision))
 
 
     class LocationIQ:
@@ -419,7 +417,7 @@ class GQC:
         self.cache = Cache(self.config.value('cache-file'));
         self.cache.load()
 
-        self.canonicalize = GQC.Canonicalize(self);
+        self.canonicalize = Canonicalize(self.config.value('latitude-precision'), self.config.value('longitude-precision'));
 
         self.geometry = Geometry(self.config.value('latitude-precision'), self.config.value('longitude-precision'))
 
