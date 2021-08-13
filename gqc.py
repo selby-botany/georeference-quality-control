@@ -34,15 +34,14 @@ class GQC:
     MIN_FUZZY_SCORE = 85
 
     __instance = None
-    __backoff_initial_seconds = 1
 
 
     class Cache:
-        def __init__(self, gqc):
-            self.gqc = gqc
+        def __init__(self, cache_file):
+            self.cache_file = cache_file
 
         def dump(self):
-            with open(self.gqc.config_value('cache-file'), 'w+') as cachefile:
+            with open(self.cache_file, 'w+') as cachefile:
                 json.dump(self.__cache, cachefile)
 
 
@@ -63,10 +62,9 @@ class GQC:
 
 
         def load(self):
-            cachefile = self.gqc.config_value('cache-file')
             cache = {}
-            if os.path.exists(cachefile) and os.path.isfile(cachefile) and os.access(cachefile, os.R_OK) and (os.path.getsize(cachefile) >= len('''{}''')):
-                with open(cachefile, 'r') as filehandle:
+            if os.path.exists(self.cache_file) and os.path.isfile(self.cache_file) and os.access(self.cache_file, os.R_OK) and (os.path.getsize(self.cache_file) >= len('''{}''')):
+                with open(self.cache_file, 'r') as filehandle:
                     cache = json.loads(filehandle.read())
             self.__cache = cache
 
@@ -123,6 +121,71 @@ class GQC:
             return float('{0:.{1}f}'.format(float(latlon),
                                             max(int(self.gqc.config_value('latitude-precision')), 
                                                 int(self.gqc.config_value('longitude-precision')))))
+
+
+    class LocationIQ:
+        def __init__(self, gqc):
+            self.gqc = gqc
+            self.__backoff_initial_seconds = float(self.gqc.sysconfig_value('backoff-initial-seconds'));
+            self.__backoff_growth_factor = float(self.gqc.sysconfig_value('backoff-growth-factor'))
+            self.__backoff_learning_factor = float(self.gqc.sysconfig_value('backoff-learning-factor'))
+            self.__host = self.gqc.config_value('api-host', 'location-iq')
+            self.__token = self.gqc.config_value('api-token', 'location-iq')
+            if not self.__host:
+                raise ValueError('api-host is not set')
+            if not self.__token:
+                raise ValueError('api-token is not set')
+
+        def reverse_geolocate(self, latitude, longitude, wait=True):
+            url = self.reverse_geolocate_url(latitude, longitude)
+            logging.debug(f'request lat={latitude} long={longitude} url={url}')
+            # FIXME: Break this down and do error checking
+            result = self.__reverse_geolocate_fetch(url, wait)
+            logging.debug(f'response lat={latitude} long={longitude} result={result}')
+            if result:
+                result = json.loads(result)
+                if 'error' in result:
+                    raise RuntimeError(json.dumps(result))
+            return result
+
+        def reverse_geolocate_url(self, latitude, longitude):
+            return self.gqc.config_value("reverse_url_format", section="location-iq").format(host=self.__host, token=self.__token, latitude=latitude, longitude=longitude)
+
+        def __reverse_geolocate_fetch(self, url, wait=True):
+            ssl._create_default_https_context = ssl._create_unverified_context
+            result = '{}'
+            _adjust_backoff = False
+            sleep_seconds = self.__backoff_initial_seconds
+            logging.debug(f'sleep_seconds={sleep_seconds}')
+
+            while True:
+                try:
+                    logging.debug(f'urlopen «{url}»')
+                    result = urllib.request.urlopen(url).read()
+                    logging.debug(f'url={url} result={result}')
+                    break
+                except urllib.error.HTTPError as exception:
+                    logging.debug(f'url={url} result={result} exception={exception} code={exception.code} reason ={exception.reason} headers={exception.headers}')
+                    if exception.code == http.HTTPStatus.TOO_MANY_REQUESTS:
+                        logging.debug(f'TOO_MANY_REQUESTS! url={url} result={result} headers={exception.headers}')
+                        logging.debug(f'TOO_MANY_REQUESTS! wait {sleep_seconds} seconds to let the server cool down')
+                        time.sleep(sleep_seconds)
+                        sleep_seconds *= self.__backoff_growth_factor
+                        logging.debug(f'new-sleep-seconds-after-backoff={sleep_seconds}')
+                    elif exception.code == http.HTTPStatus.NOT_FOUND:
+                        return '{}'
+                    else:
+                        raise
+            if not self.__backoff_initial_seconds == sleep_seconds:
+                logging.debug(f'sleep_seconds={sleep_seconds}, self.__backoff_initial_seconds={self.__backoff_initial_seconds}, self.__backoff_learning_factor={self.__backoff_learning_factor}')
+                new_backoff_initial_seconds = self.__backoff_initial_seconds + ((self.__backoff_initial_seconds + sleep_seconds) * self.__backoff_learning_factor)
+                if not self.__backoff_initial_seconds == new_backoff_initial_seconds:
+                    logging.debug(f'increase backoff-initial-seconds from {self.__backoff_initial_seconds} to {new_backoff_initial_seconds}')
+                    self.__backoff_initial_seconds = new_backoff_initial_seconds
+            if wait:
+                logging.debug(f'rate limit -- wait {self.__backoff_initial_seconds} seconds')
+                time.sleep(self.__backoff_initial_seconds)
+            return result
 
 
     class Validate:
@@ -209,16 +272,14 @@ class GQC:
                             datefmt=self.sysconfig_value('logging')['datefmt'],
                             level=getattr(logging, self.config_value('log-level').upper(), getattr(logging, 'INFO')))
 
-        self.__backoff_initial_seconds = float(self.sysconfig_value('backoff-initial-seconds'));
-        self.__backoff_growth_factor = float(self.sysconfig_value('backoff-growth-factor'))
-        self.__backoff_learning_factor = float(self.sysconfig_value('backoff-learning-factor'))
-
-        self.cache = GQC.Cache(self);
+        self.cache = GQC.Cache(self.config_value('cache-file'));
         self.cache.load()
 
         self.canonicalize = GQC.Canonicalize(self);
 
         self.geometry = GQC.Geometry(self)
+
+        self.locationiq = GQC.LocationIQ(self)
 
         logging.debug(f'config: {self.config}')
         logging.debug(f'gqc.cache-file: {self.config_value("cache-file")}')
@@ -592,67 +653,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         return cls.__instance
 
 
-    def locationiq_reverse_geolocate(self, latitude, longitude, wait=True):
-        url = self.locationiq_reverse_geolocate_url(latitude, longitude)
-        logging.debug(f'request lat={latitude} long={longitude} url={url}')
-        # FIXME: Break this down and do error checking
-        result = self.__locationiq_reverse_geolocate_fetch(url, wait)
-        logging.debug(f'response lat={latitude} long={longitude} result={result}')
-        if result:
-            result = json.loads(result)
-            if 'error' in result:
-                raise RuntimeError(json.dumps(result))
-        return result
-
-
-    def __locationiq_reverse_geolocate_fetch(self, url, wait=True):
-        ssl._create_default_https_context = ssl._create_unverified_context
-        result = '{}'
-        _adjust_backoff = False
-        sleep_seconds = self.__backoff_initial_seconds
-        logging.debug(f'sleep_seconds={sleep_seconds}')
-
-        while True:
-            try:
-                logging.debug(f'urlopen «{url}»')
-                result = urllib.request.urlopen(url).read()
-                logging.debug(f'url={url} result={result}')
-                break
-            except urllib.error.HTTPError as exception:
-                logging.debug(f'url={url} result={result} exception={exception} code={exception.code} reason ={exception.reason} headers={exception.headers}')
-                if exception.code == http.HTTPStatus.TOO_MANY_REQUESTS:
-                    logging.debug(f'TOO_MANY_REQUESTS! url={url} result={result} headers={exception.headers}')
-                    logging.debug(f'TOO_MANY_REQUESTS! wait {sleep_seconds} seconds to let the server cool down')
-                    time.sleep(sleep_seconds)
-                    sleep_seconds *= self.__backoff_growth_factor
-                    logging.debug(f'new-sleep-seconds-after-backoff={sleep_seconds}')
-                elif exception.code == http.HTTPStatus.NOT_FOUND:
-                    return '{}'
-                else:
-                    raise
-        if not self.__backoff_initial_seconds == sleep_seconds:
-            logging.debug(f'sleep_seconds={sleep_seconds}, self.__backoff_initial_seconds={self.__backoff_initial_seconds}, self.__backoff_learning_factor={self.__backoff_learning_factor}')
-            new_backoff_initial_seconds = self.__backoff_initial_seconds + ((self.__backoff_initial_seconds + sleep_seconds) * self.__backoff_learning_factor)
-            if not self.__backoff_initial_seconds == new_backoff_initial_seconds:
-                logging.debug(f'increase backoff-initial-seconds from {self.__backoff_initial_seconds} to {new_backoff_initial_seconds}')
-                self.__backoff_initial_seconds = new_backoff_initial_seconds
-        if wait:
-            logging.debug(f'rate limit -- wait {self.__backoff_initial_seconds} seconds')
-            time.sleep(self.__backoff_initial_seconds)
-        return result
-
-
-    def locationiq_reverse_geolocate_url(self, latitude, longitude):
-        host = self.config_value('api-host', 'location-iq')
-        token = self.config_value('api-token', 'location-iq')
-        if not host:
-            raise ValueError('api-host is not set')
-        if not token:
-            raise ValueError('api-token is not set')
-        
-        return self.config_value("reverse_url_format", section="location-iq").format(host=host, token=token, latitude=latitude, longitude=longitude)
-
-
     def process_row(self, row):
         assert 'accession-number' in row, f'missing "accession-number" element'
         assert 'country' in row, f'missing "country" element'
@@ -838,7 +838,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         if usecache and self.cache.exists(cachekey):
             result = self.cache.get(cachekey)
         elif not self.config_value("cache-only"):
-            result = self.locationiq_reverse_geolocate(latitude, longitude, wait)
+            result = self.locationiq.reverse_geolocate(latitude, longitude, wait)
             if result and usecache:
                 self.cache.put(cachekey, result)
         return result
