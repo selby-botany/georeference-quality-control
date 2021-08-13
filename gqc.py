@@ -101,6 +101,30 @@ class GQC:
             return float('{0:.{1}f}'.format(longitude, self.longitude_precision))
 
 
+    class Geometry:
+        def __init__(self, gqc):
+            self.gqc = gqc
+
+        def distance(self, start_latitude, start_longitude, end_latitude, end_longitude):
+            result = self.haversine_distance(start_latitude, start_longitude, end_latitude, end_longitude)
+            return self.canonicalize_kilometers(result)
+    
+        def geodesic_distance(self, start_latitude, start_longitude, end_latitude, end_longitude):
+            return distance.distance((start_latitude, start_longitude), (end_latitude, end_longitude)).km
+    
+    
+        def haversine_distance(self, start_latitude: float, start_longitude: float, end_latitude: float, end_longitude: float) -> float:
+            return haversine((start_latitude, start_longitude), (end_latitude, end_longitude), unit=Unit.KILOMETERS)
+    
+        def canonicalize_kilometers(self, distance):
+            return float('{0:.3f}'.format(float(distance)))
+    
+        def canonicalize_latlon(self, latlon):
+            return float('{0:.{1}f}'.format(float(latlon),
+                                            max(int(self.gqc.config_value('latitude-precision')), 
+                                                int(self.gqc.config_value('longitude-precision')))))
+
+
     class Validate:
         @staticmethod
         def dir_writable(self, dnm):
@@ -193,6 +217,8 @@ class GQC:
         self.cache.load()
 
         self.canonicalize = GQC.Canonicalize(self);
+
+        self.geometry = GQC.Geometry(self)
 
         logging.debug(f'config: {self.config}')
         logging.debug(f'gqc.cache-file: {self.config_value("cache-file")}')
@@ -375,29 +401,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         result['pd4'] = address['suburb'] if 'suburb' in address else ''
         result['pd5'] = address['neighbourhood'] if 'neighbourhood' in address else ''
         return dict(result)
-
-
-    def geometry_distance(self, start_latitude, start_longitude, end_latitude, end_longitude):
-        result = self.__geometry_haversine_distance(start_latitude, start_longitude, end_latitude, end_longitude)
-        return self.geometry_canonicalize_kilometers(result)
-
-
-    def __geometry_geodesic_distance(self, start_latitude, start_longitude, end_latitude, end_longitude):
-        return distance.distance((start_latitude, start_longitude), (end_latitude, end_longitude)).km
-
-
-    def __geometry_haversine_distance(self, start_latitude: float, start_longitude: float, end_latitude: float, end_longitude: float) -> float:
-        return haversine((start_latitude, start_longitude), (end_latitude, end_longitude), unit=Unit.KILOMETERS)
-
-
-    def geometry_canonicalize_kilometers(self, distance):
-        return float('{0:.3f}'.format(float(distance)))
-
-
-    def geometry_canonicalize_latlon(self, latlon):
-        return float('{0:.{1}f}'.format(float(latlon),
-                                        max(int(self.config_value('latitude-precision')), 
-                                            int(self.config_value('longitude-precision')))))
 
 
     def get_active_columns(self):
@@ -757,13 +760,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                 logging.debug(f'revloc {revloc}')
                 for k,v in revloc.items():
                     response[f'location-{k}'] = v
-            response['location-latitude'] = self.geometry_canonicalize_latlon(location['lat']) if 'lat' in location else ''
-            response['location-longitude'] = self.geometry_canonicalize_latlon(location['lon']) if 'lon' in location else ''
+            response['location-latitude'] = self.geometry.canonicalize_latlon(location['lat']) if 'lat' in location else ''
+            response['location-longitude'] = self.geometry.canonicalize_latlon(location['lon']) if 'lon' in location else ''
             response['display-name'] = location['display_name'] if 'display_name' in location else ''
             if response['location-latitude'] and response['location-longitude']:
                 try:
                     response['location-error-distance'] = (
-                        self.geometry_distance(canonical_row['latitude'], 
+                        self.geometry.distance(canonical_row['latitude'], 
                                                canonical_row['longitude'], 
                                                self.canonicalize.latitude(response['location-latitude']), 
                                                self.canonicalize.longitude(response['location-longitude'])))
@@ -777,19 +780,19 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                 boundingbox['longitude-east'] and
                 boundingbox['longitude-west']): 
                 response['location-bounding-box-error-distances'] = {
-                    'latitude-north': self.geometry_distance(canonical_row['latitude'], 
+                    'latitude-north': self.geometry.distance(canonical_row['latitude'], 
                                                              canonical_row['longitude'], 
                                                              self.canonicalize.latitude(boundingbox['latitude-north']), 
                                                              canonical_row['longitude']),
-                    'latitude-south': self.geometry_distance(canonical_row['latitude'],
+                    'latitude-south': self.geometry.distance(canonical_row['latitude'],
                                                              canonical_row['longitude'], 
                                                              self.canonicalize.latitude(boundingbox['latitude-south']), 
                                                              canonical_row['longitude']),
-                    'longitude-east': self.geometry_distance(canonical_row['latitude'], 
+                    'longitude-east': self.geometry.distance(canonical_row['latitude'], 
                                                              canonical_row['longitude'], 
                                                              canonical_row['latitude'], 
                                                              self.canonicalize.longitude(boundingbox['longitude-east'])),
-                    'longitude-west': self.geometry_distance(canonical_row['latitude'], 
+                    'longitude-west': self.geometry.distance(canonical_row['latitude'], 
                                                              canonical_row['longitude'], 
                                                              canonical_row['latitude'], 
                                                              self.canonicalize.longitude(boundingbox['longitude-west'])),
