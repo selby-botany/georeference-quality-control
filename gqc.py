@@ -37,6 +37,70 @@ class GQC:
     __backoff_initial_seconds = 1
 
 
+    class Cache:
+        def __init__(self, gqc):
+            self.gqc = gqc
+
+        def dump(self):
+            with open(self.gqc.config_value('cache-file'), 'w+') as cachefile:
+                json.dump(self.__cache, cachefile)
+
+
+        def exists(self, cachekey):
+            assert cachekey, f'Missing cachekey'
+            result = (cachekey in self.__cache)
+            logging.debug(f'key «{cachekey}» => result «{result}»')
+            return result
+
+
+        def get(self, cachekey):
+            assert cachekey, f'Missing cachekey'
+            result = self.__cache[cachekey] if cachekey in self.__cache else None
+            if 'value' in result:
+                result = result['value']
+            logging.debug(f'key «{cachekey}» => result «{result}»')
+            return result
+
+
+        def load(self):
+            cachefile = self.gqc.config_value('cache-file')
+            cache = {}
+            if os.path.exists(cachefile) and os.path.isfile(cachefile) and os.access(cachefile, os.R_OK) and (os.path.getsize(cachefile) >= len('''{}''')):
+                with open(cachefile, 'r') as filehandle:
+                    cache = json.loads(filehandle.read())
+            self.__cache = cache
+
+        def put(self, cachekey, value):
+            assert cachekey, f'Missing cachekey'
+            self.__cache[cachekey] = {'creation-time': datetime.utcnow().strftime('%Y%m%dT%H%M%S'), 'value': value }
+            self.dump()
+            logging.debug(f'(key «{cachekey}» <= value «{self.__cache[cachekey]})»')
+
+
+    class Canonicalize:
+        def __init__(self, gqc):
+            self.gqc = gqc
+            self.latitude_precision = int(self.gqc.config_value('latitude-precision'))
+            self.longitude_precision = int(self.gqc.config_value('longitude-precision'))
+
+        def alpha_element(self, element):
+            regex = re.compile('[^a-zA-Z]')
+            e = regex.sub('', unicodedata.normalize('NFKD', str(element)).lower().strip().replace(' ', ''))
+            if e == 'null': e = ''
+            logging.debug(f'element «{element}» => «{e}»')
+            return e
+    
+        def latitude(self, latitude):
+            latitude = float(latitude)
+            assert (latitude >= -90 and latitude <= 90), f'latitude "{latitude}" is not a number between -90 and 90'
+            return float('{0:.{1}f}'.format(latitude, self.latitude_precision))
+    
+        def longitude(self, longitude):
+            longitude = float(longitude)
+            assert (longitude >= -360 and longitude <= 360), f'longitude "{longitude}" not a number between -360 and 360'
+            return float('{0:.{1}f}'.format(longitude, self.longitude_precision))
+
+
     def __init__(self, argv):
         ''' Virtually private constructor. '''
         if GQC.__instance != None:
@@ -85,7 +149,10 @@ class GQC:
         self.__backoff_growth_factor = float(self.sysconfig_value('backoff-growth-factor'))
         self.__backoff_learning_factor = float(self.sysconfig_value('backoff-learning-factor'))
 
-        self.cache_load()
+        self.cache = GQC.Cache(self);
+        self.cache.load()
+
+        self.canonicalize = GQC.Canonicalize(self);
 
         logging.debug(f'config: {self.config}')
         logging.debug(f'gqc.cache-file: {self.config_value("cache-file")}')
@@ -106,63 +173,6 @@ class GQC:
         logging.debug(f'location-iq.api-token: {self.config_value("api-token", section="location-iq")}')
 
         return
-
-
-    def cache_dump(self):
-        with open(self.config_value('cache-file'), 'w+') as cachefile:
-            json.dump(self.__cache, cachefile)
-
-
-    def cache_exists(self, cachekey):
-        assert cachekey, f'Missing cachekey'
-        result = (cachekey in self.__cache)
-        logging.debug(f'key «{cachekey}» => result «{result}»')
-        return result
-
-
-    def cache_get(self, cachekey):
-        assert cachekey, f'Missing cachekey'
-        result = self.__cache[cachekey] if cachekey in self.__cache else None
-        if 'value' in result:
-            result = result['value']
-        logging.debug(f'key «{cachekey}» => result «{result}»')
-        return result
-
-
-    def cache_load(self):
-        cachefile = self.config_value('cache-file')
-        cache = {}
-        if os.path.exists(cachefile) and os.path.isfile(cachefile) and os.access(cachefile, os.R_OK) and (os.path.getsize(cachefile) >= len('''{}''')):
-            with open(cachefile, 'r') as filehandle:
-                cache = json.loads(filehandle.read())
-        self.__cache = cache
-
-    def cache_put(self, cachekey, value):
-        assert cachekey, f'Missing cachekey'
-        self.__cache[cachekey] = {'creation-time': datetime.utcnow().strftime('%Y%m%dT%H%M%S'), 'value': value }
-        self.cache_dump()
-        logging.debug(f'(key «{cachekey}» <= value «{self.__cache[cachekey]})»')
-
-
-    def canonicalize_alpha_element(self, element):
-        regex = re.compile('[^a-zA-Z]')
-        e = regex.sub('', unicodedata.normalize('NFKD', str(element)).lower().strip().replace(' ', ''))
-        if e == 'null': e = ''
-        logging.debug(f'element «{element}» => «{e}»')
-        return e
-
-
-    def canonicalize_latitude(self, latitude):
-        latitude = float(latitude)
-        assert (latitude >= -90 and latitude <= 90), f'latitude "{latitude}" is not a number between -90 and 90'
-        return float('{0:.{1}f}'.format(latitude, int(self.config_value('latitude-precision'))))
-
-
-    def canonicalize_longitude(self, longitude):
-        longitude = float(longitude)
-        assert (longitude >= -360 and longitude <= 360), f'longitude "{longitude}" not a number between -360 and 360'
-        return float('{0:.{1}f}'.format(longitude, int(self.config_value('longitude-precision'))))
-
 
     def check_dir_writable(self, dnm):
         if os.path.exists(dnm):
@@ -233,7 +243,7 @@ class GQC:
         permutations = [(1, -1), (-1, 1), (-1, -1)]
         columns = self.get_location_columns()
         # convenience variables
-        i_p = (self.canonicalize_latitude(inrow['latitude']), self.canonicalize_longitude(inrow['longitude']))
+        i_p = (self.canonicalize.latitude(inrow['latitude']), self.canonicalize.longitude(inrow['longitude']))
         # the input political devisions in descending order
         i_pd = {c:inrow[c] for c in columns}
         # the list of locations tuples to try
@@ -723,9 +733,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         canonical_row = {}
         try:
             for k in self.get_location_columns():
-                canonical_row[k] = self.canonicalize_alpha_element(row[k])
-            canonical_row['latitude'] = self.canonicalize_latitude(row['latitude'])
-            canonical_row['longitude'] = self.canonicalize_longitude(row['longitude'])
+                canonical_row[k] = self.canonicalize.alpha_element(row[k])
+            canonical_row['latitude'] = self.canonicalize.latitude(row['latitude'])
+            canonical_row['longitude'] = self.canonicalize.longitude(row['longitude'])
         except ValueError as _:
             response['action'] = 'ignore'
             response['reason'] = f'canonicalize-error'
@@ -751,8 +761,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     response['location-error-distance'] = (
                         self.geometry_distance(canonical_row['latitude'], 
                                                canonical_row['longitude'], 
-                                               self.canonicalize_latitude(response['location-latitude']), 
-                                               self.canonicalize_longitude(response['location-longitude'])))
+                                               self.canonicalize.latitude(response['location-latitude']), 
+                                               self.canonicalize.longitude(response['location-longitude'])))
                 except:
                     raise
 
@@ -765,20 +775,20 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                 response['location-bounding-box-error-distances'] = {
                     'latitude-north': self.geometry_distance(canonical_row['latitude'], 
                                                              canonical_row['longitude'], 
-                                                             self.canonicalize_latitude(boundingbox['latitude-north']), 
+                                                             self.canonicalize.latitude(boundingbox['latitude-north']), 
                                                              canonical_row['longitude']),
                     'latitude-south': self.geometry_distance(canonical_row['latitude'],
                                                              canonical_row['longitude'], 
-                                                             self.canonicalize_latitude(boundingbox['latitude-south']), 
+                                                             self.canonicalize.latitude(boundingbox['latitude-south']), 
                                                              canonical_row['longitude']),
                     'longitude-east': self.geometry_distance(canonical_row['latitude'], 
                                                              canonical_row['longitude'], 
                                                              canonical_row['latitude'], 
-                                                             self.canonicalize_longitude(boundingbox['longitude-east'])),
+                                                             self.canonicalize.longitude(boundingbox['longitude-east'])),
                     'longitude-west': self.geometry_distance(canonical_row['latitude'], 
                                                              canonical_row['longitude'], 
                                                              canonical_row['latitude'], 
-                                                             self.canonicalize_longitude(boundingbox['longitude-west'])),
+                                                             self.canonicalize.longitude(boundingbox['longitude-west'])),
                     }
             imatch = []
             rmatch = []
@@ -791,7 +801,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                 if score < self.MIN_FUZZY_SCORE:
                     response['action'] = 'error'
                     response['reason'] = f'{k}-mismatch'
-                    response['note'] = f'input location «{imatch}» ({canonical_row["latitude"]}, {canonical_row["longitude"]}) does not match response location ({self.canonicalize_latitude(response["location-latitude"])}, {self.canonicalize_latitude(response["location-longitude"])}) «{imatch}»'
+                    response['note'] = f'input location «{imatch}» ({canonical_row["latitude"]}, {canonical_row["longitude"]}) does not match response location ({self.canonicalize.latitude(response["location-latitude"])}, {self.canonicalize.latitude(response["location-longitude"])}) «{imatch}»'
                     response = self.correct_typos(row, response)
                     break
 
@@ -818,12 +828,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             usecache = self.config_value('cache-enabled')
         cachekey=f'latitude:{latitude},longitude:{longitude}'
         result = {}
-        if usecache and self.cache_exists(cachekey):
-            result = self.cache_get(cachekey)
+        if usecache and self.cache.exists(cachekey):
+            result = self.cache.get(cachekey)
         elif not self.config_value("cache-only"):
             result = self.locationiq_reverse_geolocate(latitude, longitude, wait)
             if result and usecache:
-                self.cache_put(cachekey, result)
+                self.cache.put(cachekey, result)
         return result
 
 
