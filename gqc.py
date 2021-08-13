@@ -242,6 +242,46 @@ class Util:
         return result
 
 
+class Validate:
+    @staticmethod
+    def dir_writable(dnm):
+        if os.path.exists(dnm):
+            # path exists
+            if os.path.isdir(dnm): # is it a file or a dir?
+                # also works when dir is a link and the target is writable
+                return os.access(dnm, os.W_OK)
+            else:
+                return False # path is a file, so cannot write as a dir
+        # target does not exist, check perms on parent dir
+        pdir = os.path.dirname(dnm)
+        if not pdir: pdir = '.'
+        # target is creatable if parent dir is writable
+        return os.access(pdir, os.W_OK)
+
+
+    @staticmethod
+    def file_readable(filename):
+        if os.path.exists(filename) and os.path.isfile(filename):
+            return os.access(filename, os.R_OK)
+        return False
+
+
+    @staticmethod
+    def file_writable(filename):
+        if os.path.exists(filename):
+            # path exists
+            if os.path.isfile(filename): # is it a file or a dir?
+                # also works when file is a link and the target is writable
+                return os.access(filename, os.W_OK)
+            else:
+                return False # path is a dir, so cannot write as a file
+        # target does not exist, check perms on parent dir
+        pdir = os.path.dirname(filename)
+        if not pdir: pdir = '.'
+        # target is creatable if parent dir is writable
+        return os.access(pdir, os.W_OK)
+
+
 class GQC:
     '''Geolocation Quality Control (gqc)'''
 
@@ -338,46 +378,6 @@ class GQC:
                 logging.debug(f'rate limit -- wait {self.__backoff_initial_seconds} seconds')
                 time.sleep(self.__backoff_initial_seconds)
             return result
-
-
-    class Validate:
-        @staticmethod
-        def dir_writable(dnm):
-            if os.path.exists(dnm):
-                # path exists
-                if os.path.isdir(dnm): # is it a file or a dir?
-                    # also works when dir is a link and the target is writable
-                    return os.access(dnm, os.W_OK)
-                else:
-                    return False # path is a file, so cannot write as a dir
-            # target does not exist, check perms on parent dir
-            pdir = os.path.dirname(dnm)
-            if not pdir: pdir = '.'
-            # target is creatable if parent dir is writable
-            return os.access(pdir, os.W_OK)
-    
-    
-        @staticmethod
-        def file_readable(filename):
-            if os.path.exists(filename) and os.path.isfile(filename):
-                return os.access(filename, os.R_OK)
-            return False
-    
-    
-        @staticmethod
-        def file_writable(filename):
-            if os.path.exists(filename):
-                # path exists
-                if os.path.isfile(filename): # is it a file or a dir?
-                    # also works when file is a link and the target is writable
-                    return os.access(filename, os.W_OK)
-                else:
-                    return False # path is a dir, so cannot write as a file
-            # target does not exist, check perms on parent dir
-            pdir = os.path.dirname(filename)
-            if not pdir: pdir = '.'
-            # target is creatable if parent dir is writable
-            return os.access(pdir, os.W_OK)
 
 
     def __init__(self, argv):
@@ -608,7 +608,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     result[Config.SECTION_LOCATIONIQ]['api-host'] = arg
                 elif opt in ['-C', '--cache-file']:
                     path = os.path.realpath(arg)
-                    if not GQC.Validate.file_writable(path): raise ValueError(f'Can not write to cache file: {path}')
+                    if not Validate.file_writable(path): raise ValueError(f'Can not write to cache file: {path}')
                     result[Config.SECTION_GQC]['cache-file'] = path
                 elif opt in ['--cache-only']:
                     result[Config.SECTION_GQC]['cache-enabled'] = 'true'
@@ -634,14 +634,14 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     result[Config.SECTION_GQC]['first-line-is-header'] = True
                 elif opt in ['-i', '--input', '--input-file']:
                     path = os.path.realpath(arg)
-                    if not GQC.Validate.file_readable(path): raise ValueError(f'Can not read input file: {path}')
+                    if not Validate.file_readable(path): raise ValueError(f'Can not read input file: {path}')
                     result[Config.SECTION_GQC]['input-file'] = path
                 elif opt in ['--latitude-precision']:
                     if not (arg.isdigit() and int(arg) >= 0): raise ValueError(f'latitude-precision must be an integer > 0: {arg}')
                     result[Config.SECTION_GQC]['latitude-precision'] = arg
                 elif opt in ['-L', '--log-file']:
                     path = os.path.realpath(arg)
-                    if not GQC.Validate.file_writable(path): raise ValueError(f'Can not write to log file: {path}')
+                    if not Validate.file_writable(path): raise ValueError(f'Can not write to log file: {path}')
                     result[Config.SECTION_GQC]['log-file'] = path
                 elif opt in ['-l', '--log-level']:
                     l = getattr(logging, arg.upper(), None)
@@ -654,7 +654,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     result[Config.SECTION_GQC]['first-line-is-header'] = False
                 elif opt in ['-o', '--output', '--output-file']:
                     path = os.path.realpath(arg)
-                    if not GQC.Validate.file_writable(path): raise ValueError(f'Can not write to output file: {path}')
+                    if not Validate.file_writable(path): raise ValueError(f'Can not write to output file: {path}')
                     result[Config.SECTION_GQC]['output-file'] = path
                 elif opt in ['-s', '--separator']:
                     result[Config.SECTION_GQC]['separator'] = arg
