@@ -27,6 +27,45 @@ import urllib.error
 import urllib.request
 
 
+class Cache:
+    def __init__(self, cache_file):
+        self.cache_file = cache_file
+
+    def dump(self):
+        with open(self.cache_file, 'w+') as cachefile:
+            json.dump(self.__cache, cachefile)
+
+
+    def exists(self, cachekey):
+        assert cachekey, f'Missing cachekey'
+        result = (cachekey in self.__cache)
+        logging.debug(f'key «{cachekey}» => result «{result}»')
+        return result
+
+
+    def get(self, cachekey):
+        assert cachekey, f'Missing cachekey'
+        result = self.__cache[cachekey] if cachekey in self.__cache else None
+        if 'value' in result:
+            result = result['value']
+        logging.debug(f'key «{cachekey}» => result «{result}»')
+        return result
+
+
+    def load(self):
+        cache = {}
+        if os.path.exists(self.cache_file) and os.path.isfile(self.cache_file) and os.access(self.cache_file, os.R_OK) and (os.path.getsize(self.cache_file) >= len('''{}''')):
+            with open(self.cache_file, 'r') as filehandle:
+                cache = json.loads(filehandle.read())
+        self.__cache = cache
+
+    def put(self, cachekey, value):
+        assert cachekey, f'Missing cachekey'
+        self.__cache[cachekey] = {'creation-time': datetime.utcnow().strftime('%Y%m%dT%H%M%S'), 'value': value }
+        self.dump()
+        logging.debug(f'(key «{cachekey}» <= value «{self.__cache[cachekey]})»')
+
+
 class Util:
     @staticmethod
     def dict_merge(a, b):
@@ -51,45 +90,6 @@ class GQC:
     MIN_FUZZY_SCORE = 85
 
     __instance = None
-
-
-    class Cache:
-        def __init__(self, cache_file):
-            self.cache_file = cache_file
-
-        def dump(self):
-            with open(self.cache_file, 'w+') as cachefile:
-                json.dump(self.__cache, cachefile)
-
-
-        def exists(self, cachekey):
-            assert cachekey, f'Missing cachekey'
-            result = (cachekey in self.__cache)
-            logging.debug(f'key «{cachekey}» => result «{result}»')
-            return result
-
-
-        def get(self, cachekey):
-            assert cachekey, f'Missing cachekey'
-            result = self.__cache[cachekey] if cachekey in self.__cache else None
-            if 'value' in result:
-                result = result['value']
-            logging.debug(f'key «{cachekey}» => result «{result}»')
-            return result
-
-
-        def load(self):
-            cache = {}
-            if os.path.exists(self.cache_file) and os.path.isfile(self.cache_file) and os.access(self.cache_file, os.R_OK) and (os.path.getsize(self.cache_file) >= len('''{}''')):
-                with open(self.cache_file, 'r') as filehandle:
-                    cache = json.loads(filehandle.read())
-            self.__cache = cache
-
-        def put(self, cachekey, value):
-            assert cachekey, f'Missing cachekey'
-            self.__cache[cachekey] = {'creation-time': datetime.utcnow().strftime('%Y%m%dT%H%M%S'), 'value': value }
-            self.dump()
-            logging.debug(f'(key «{cachekey}» <= value «{self.__cache[cachekey]})»')
 
 
     class Canonicalize:
@@ -118,7 +118,8 @@ class GQC:
 
     class Geometry:
         def __init__(self, gqc):
-            self.gqc = gqc
+            self.precision = max(int(gqc.config_value('latitude-precision')), 
+                                 int(gqc.config_value('longitude-precision')))
 
         def distance(self, start_latitude, start_longitude, end_latitude, end_longitude):
             result = self.haversine_distance(start_latitude, start_longitude, end_latitude, end_longitude)
@@ -135,9 +136,7 @@ class GQC:
             return float('{0:.3f}'.format(float(distance)))
     
         def canonicalize_latlon(self, latlon):
-            return float('{0:.{1}f}'.format(float(latlon),
-                                            max(int(self.gqc.config_value('latitude-precision')), 
-                                                int(self.gqc.config_value('longitude-precision')))))
+            return float('{0:.{1}f}'.format(float(latlon),self.precision))
 
 
     class LocationIQ:
@@ -289,7 +288,7 @@ class GQC:
                             datefmt=self.sysconfig_value('logging')['datefmt'],
                             level=getattr(logging, self.config_value('log-level').upper(), getattr(logging, 'INFO')))
 
-        self.cache = GQC.Cache(self.config_value('cache-file'));
+        self.cache = Cache(self.config_value('cache-file'));
         self.cache.load()
 
         self.canonicalize = GQC.Canonicalize(self);
