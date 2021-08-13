@@ -27,6 +27,23 @@ import urllib.error
 import urllib.request
 
 
+class Util:
+    @staticmethod
+    def dict_merge(a, b):
+        '''recursively merges dict's. not just simple a['key'] = b['key'], if
+        both a and b have a key who's value is a dict then dict_merge is called
+        on both values and the result stored in the returned dictionary.'''
+        if not isinstance(b, dict):
+            return b
+        result = copy.deepcopy(a)
+        for k, v in b.items():
+            if k in result and isinstance(result[k], dict):
+                    result[k] = Util.dict_merge(result[k], v)
+            else:
+                result[k] = copy.deepcopy(v)
+        return result
+
+
 class GQC:
     '''Geolocation Quality Control (gqc)'''
 
@@ -237,7 +254,7 @@ class GQC:
 
         self.config = {'gqc': {}, 'location-iq': {}, '__sys__': {}}
         default = self.get_default_configuration()
-        self.config = self.dict_merge(self.config, default)
+        self.config = Util.dict_merge(self.config, default)
 
         # Initial logging configuration ... will be reset after options processing
         logging.basicConfig(filename=self.config_value('log-file'),
@@ -252,10 +269,10 @@ class GQC:
         iniconfig = configparser.ConfigParser(default_section='gqc')
         iniconfig.read(inifiles)
         iniconfig = self.configparser_to_dict(iniconfig)
-        self.config = self.dict_merge(self.config, iniconfig)
+        self.config = Util.dict_merge(self.config, iniconfig)
  
         useroptions = self.get_options(argv)
-        self.config = self.dict_merge(self.config, useroptions)
+        self.config = Util.dict_merge(self.config, useroptions)
 
         try:
             pathlib.Path(os.path.dirname(self.config_value('cache-file'))).mkdir(parents=True, exist_ok=True)
@@ -385,21 +402,6 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 '''
-
-
-    def dict_merge(self, a, b):
-        '''recursively merges dict's. not just simple a['key'] = b['key'], if
-        both a and b have a key who's value is a dict then dict_merge is called
-        on both values and the result stored in the returned dictionary.'''
-        if not isinstance(b, dict):
-            return b
-        result = copy.deepcopy(a)
-        for k, v in b.items():
-            if k in result and isinstance(result[k], dict):
-                    result[k] = self.dict_merge(result[k], v)
-            else:
-                result[k] = copy.deepcopy(v)
-        return result
 
 
     def execute(self):
@@ -595,7 +597,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     regex = re.compile('^(?:(accession-number|latitude|longitude|country|pd[1-5]):(\d+),)*(accession-number|latitude|longitude|country|pd[12345]):(\d+)$')
                     if not regex.match(arg): raise ValueError(f'Bad column-assignment value: {arg}')
                     assignments = {a[0]: int(a[1]) for a in [p.split(':') for p in arg.split(',')]}
-                    result['gqc']['column-assignment'] = self.dict_merge(self.config['gqc']['column-assignment'], assignments)
+                    result['gqc']['column-assignment'] = Util.dict_merge(self.config['gqc']['column-assignment'], assignments)
                 elif opt in ['--comment-character']:
                     result['gqc']['comment-character'] = arg
                 elif opt in ['--copyright']:
