@@ -3,6 +3,9 @@
 # set -xv
 
 
+## FIXME -- Add tests of argument and option processing
+
+
 function __check() {
     local data=${1:-''}
     local columns=${2-'country:0,pd1:1,accession-number:2,latitude:3,longitude:4'}

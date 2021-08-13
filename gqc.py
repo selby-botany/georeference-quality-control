@@ -205,7 +205,7 @@ class GQC:
 
     class Validate:
         @staticmethod
-        def dir_writable(self, dnm):
+        def dir_writable(dnm):
             if os.path.exists(dnm):
                 # path exists
                 if os.path.isdir(dnm): # is it a file or a dir?
@@ -221,14 +221,14 @@ class GQC:
     
     
         @staticmethod
-        def file_readable(self, filename):
+        def file_readable(filename):
             if os.path.exists(filename) and os.path.isfile(filename):
                 return os.access(filename, os.R_OK)
             return False
     
     
         @staticmethod
-        def file_writable(self, filename):
+        def file_writable(filename):
             if os.path.exists(filename):
                 # path exists
                 if os.path.isfile(filename): # is it a file or a dir?
