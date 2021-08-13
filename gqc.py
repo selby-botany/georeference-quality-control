@@ -66,6 +66,28 @@ class Cache:
         logging.debug(f'(key «{cachekey}» <= value «{self.__cache[cachekey]})»')
 
 
+class Geometry:
+    def __init__(self, latitude_precision, longitude_precision):
+        self.precision = max(int(latitude_precision), int(longitude_precision))
+
+    def distance(self, start_latitude, start_longitude, end_latitude, end_longitude):
+        result = self.haversine_distance(start_latitude, start_longitude, end_latitude, end_longitude)
+        return self.canonicalize_kilometers(result)
+
+    def geodesic_distance(self, start_latitude, start_longitude, end_latitude, end_longitude):
+        return distance.distance((start_latitude, start_longitude), (end_latitude, end_longitude)).km
+
+
+    def haversine_distance(self, start_latitude: float, start_longitude: float, end_latitude: float, end_longitude: float) -> float:
+        return haversine((start_latitude, start_longitude), (end_latitude, end_longitude), unit=Unit.KILOMETERS)
+
+    def canonicalize_kilometers(self, distance):
+        return float('{0:.3f}'.format(float(distance)))
+
+    def canonicalize_latlon(self, latlon):
+        return float('{0:.{1}f}'.format(float(latlon),self.precision))
+
+
 class Util:
     @staticmethod
     def dict_merge(a, b):
@@ -114,29 +136,6 @@ class GQC:
             longitude = float(longitude)
             assert (longitude >= -360 and longitude <= 360), f'longitude "{longitude}" not a number between -360 and 360'
             return float('{0:.{1}f}'.format(longitude, self.longitude_precision))
-
-
-    class Geometry:
-        def __init__(self, gqc):
-            self.precision = max(int(gqc.config_value('latitude-precision')), 
-                                 int(gqc.config_value('longitude-precision')))
-
-        def distance(self, start_latitude, start_longitude, end_latitude, end_longitude):
-            result = self.haversine_distance(start_latitude, start_longitude, end_latitude, end_longitude)
-            return self.canonicalize_kilometers(result)
-    
-        def geodesic_distance(self, start_latitude, start_longitude, end_latitude, end_longitude):
-            return distance.distance((start_latitude, start_longitude), (end_latitude, end_longitude)).km
-    
-    
-        def haversine_distance(self, start_latitude: float, start_longitude: float, end_latitude: float, end_longitude: float) -> float:
-            return haversine((start_latitude, start_longitude), (end_latitude, end_longitude), unit=Unit.KILOMETERS)
-    
-        def canonicalize_kilometers(self, distance):
-            return float('{0:.3f}'.format(float(distance)))
-    
-        def canonicalize_latlon(self, latlon):
-            return float('{0:.{1}f}'.format(float(latlon),self.precision))
 
 
     class LocationIQ:
@@ -293,7 +292,7 @@ class GQC:
 
         self.canonicalize = GQC.Canonicalize(self);
 
-        self.geometry = GQC.Geometry(self)
+        self.geometry = Geometry(self.config_value('latitude-precision'), self.config_value('longitude-precision'))
 
         self.locationiq = GQC.LocationIQ(self)
 
