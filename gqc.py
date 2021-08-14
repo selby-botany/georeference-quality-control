@@ -340,10 +340,18 @@ class GQC:
                 result = json.loads(result)
                 if 'error' in result:
                     raise RuntimeError(json.dumps(result))
+            result['location'] = self.__extract_location(result)
+            logging.debug(f'response lat={latitude} long={longitude} result={result}')
             return result
 
         def reverse_geolocate_url(self, latitude, longitude):
             return self.gqc.config.get("reverse_url_format", section=Config.SECTION_LOCATIONIQ).format(host=self.__host, token=self.__token, latitude=latitude, longitude=longitude)
+
+        def __extract_location(self, response):
+            # LocationIQ response 'address' fields to PDx indexed fields
+            keymap = {'country':'country', 'state':'pd1', 'county':'pd2', 'city':'pd3', 'suburb':'pd4', 'neighbourhood':'pd5'}
+            location = {l:response['address'][k] if (('address' in response) and (k in response['address'])) else '' for k,l in keymap.items()}
+            return dict(location)
 
         def __reverse_geolocate_fetch(self, url, wait=True):
             ssl._create_default_https_context = ssl._create_unverified_context
@@ -473,8 +481,8 @@ class GQC:
             logging.debug(f'location {l}')
             reverse = self.reverse_geolocate(l[0], l[1], usecache=True, wait=False)
             logging.debug(f'location {l} => reverse {reverse}')
-            if reverse and 'address' in reverse:
-                reverse_pds = self.extract_reverse_location(reverse['address'])
+            if reverse and 'location' in reverse:
+                reverse_pds = reverse['location']
                 reverse_pds_zip = list(zip(i_pd.values(), reverse_pds.values()))
                 logging.debug(f'reverse_pds_zip {reverse_pds_zip}')
                 scores = [fuzz.token_set_ratio(r[0],r[1]) for r in reverse_pds_zip]
@@ -565,17 +573,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     row_number += 1
 
         logging.info('That''s all folks!')
-
-
-    def extract_reverse_location(self, address):
-        result = {}
-        result['country'] = address['country'] if 'country' in address else ''
-        result['pd1'] = address ['state'] if 'state' in address else ''
-        result['pd2'] = address['county'] if 'county' in address else ''
-        result['pd3'] = address['city'] if 'city' in address else ''
-        result['pd4'] = address['suburb'] if 'suburb' in address else ''
-        result['pd5'] = address['neighbourhood'] if 'neighbourhood' in address else ''
-        return dict(result)
 
 
     def get_options(self, argv):
@@ -777,8 +774,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             response['reverse-geolocate-response'] = location
             response['accession-number'] = int(row['accession-number'])
             response['canonical-input-row'] = canonical_row
-            if 'address' in location:
-                revloc = self.extract_reverse_location(location['address'])
+            if 'location' in location:
+                revloc = location['location']
                 logging.debug(f'revloc {revloc}')
                 for k,v in revloc.items():
                     response[f'location-{k}'] = v
