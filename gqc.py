@@ -773,7 +773,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             location = self.reverse_geolocate(canonical_row['latitude'], canonical_row['longitude'])
             logging.debug(f'reverse_geolocate({canonical_row["latitude"]}, {canonical_row["longitude"]}) => {location}')
             response['reverse-geolocate-response'] = location
-            response['action'] = 'error';
             response['accession-number'] = int(row['accession-number'])
             response['canonical-input-row'] = canonical_row
             if 'address' in location:
