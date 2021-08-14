@@ -23,40 +23,46 @@ function __check() {
 }
 
 
+# FIXME test-asia-pd1-mismatch-55720
 function fixme-test-asia-pd1-mismatch-55720() {
     # from 2021-04-28--asia.results.csv
     __check 'Asia,South-Eastern Asia,Brunei,Temburong,55720,4.303602,115.332264' \
-            'country:2,pd1:3,accession-number:4,latitude:5,longitude:6'
+            'country:2,pd1:3,accession-number:4,latitude:5,longitude:6' | \
+    grep '«pass,matching-location,'
 }
 
 
 # Simple positive test case
 function test-bolivia-pass-47568() {
     # from 2021-04-28/2021-04-28--bolivia.original.csv
-    __check "Bolivia,La Paz,47568,-16.633333,-67.25"
+    __check "Bolivia,La Paz,47568,-16.633333,-67.25" | \
+    grep '«pass,matching-location,'
 }
 
 
-# Tests fuzzy country name match: Jamaica == Jamaika
-function test-caribbean-country-mismatch-101721() {
+# FIXME: Tests fuzzy country name match: Jamaica == Jamaika?
+function fixme-test-caribbean-pd1-mismatch-101721() {
     # from 2021-04-28--caribbean.results.csv
     __check 'Caribbean,Jamaica,Clarendon,101721,18.167479,-77.329748' \
-            'country:1,pd1:2,accession-number:3,latitude:4,longitude:5'
+            'country:1,pd1:2,accession-number:3,latitude:4,longitude:5' | \
+    grep '«error,pd1-mismatch,'
 }
 
 
-# Tests fuzzy country name match: Bahamas == The Bahamas
-function test-caribbean-country-mismatch-20057() {
+# FIXME: Tests fuzzy country name match: Bahamas == The Bahamas
+function fixme-test-caribbean-pd1-mismatch-20057() {
     # from 2021-04-28--caribbean.results.csv
     __check 'Caribbean,Bahamas,North Andros,20057,24.897342,-77.933323' \
-            'country:1,pd1:2,accession-number:3,latitude:4,longitude:5'
+            'country:1,pd1:2,accession-number:3,latitude:4,longitude:5' | \
+    grep '«error,pd1-mismatch,'
 }
 
 
-# Tests ability to detect a flipped sign on longitude
-function fixme-test-colombia-country-mismatch-48822() {
+# FIXME: Tests ability to detect a flipped sign on longitude
+function fixme-test-colombia-coordinate-sign-error-48822() {
     # from 2021-04-28/2021-04-28--colombia--1.original.csv
-    __check 'Colombia,Antioquia,48822,6.329973,75.647688' | grep '«error,coordinate-sign-error,'
+    __check 'Colombia,Antioquia,48822,6.329973,75.647688' | \
+    grep '«error,coordinate-sign-error,'
 }
 
 
@@ -64,11 +70,12 @@ function fixme-test-colombia-country-mismatch-48822() {
 function test-malawi-pass-23666() {
     # from 2021-04-28/2021-04-28--africa.original.csv
     __check 'Africa,Eastern Africa,Malawi,Mzimba,23666,-11.839238,33.800995' \
-            'country:2,pd1:3,accession-number:4,latitude:5,longitude:6'
+            'country:2,pd1:3,accession-number:4,latitude:5,longitude:6' | \
+    grep '«pass,matching-location,'
 }
 
 
-# Tests an (currently) unrecoverable error -- same number erroneously c&p into lat and long
+# FIXME: Tests an (currently) unrecoverable error -- same number erroneously c&p into lat and long
 function fixme-test-panama-country-mismatch-13735() {
     # from 2021-04-28/2021-04-28--panama.original.csv
     __check 'Panama,Veraguas,13735,8.604155,8.604155'
@@ -78,25 +85,27 @@ function fixme-test-panama-country-mismatch-13735() {
 
 
 # Tests ability to detect a flipped sign on latitude
-function test-peru-country-mismatch-32050() {
+function test-peru-coordinate-sign-error-32050() {
     # from 2021-04-28--peru.results.csv
-    __check 'Peru,Loreto,32050,3.828372,-73.375512' | grep '«error,coordinate-sign-error,'
+    __check 'Peru,Loreto,32050,3.828372,-73.375512' | \
+    grep '«error,coordinate-sign-error,'
 }
 
 
 # Tests fuzzy matching of country 'United States' vs. 'United States of America'
 function test-usa-country-mismatch-112841() {
     # from 2021-04-28/2021-04-28--us.original.csv
-    __check 'United States,Florida,112841,25.984375,-81.725459'
+    __check 'United States,Florida,112841,25.984375,-81.725459' | \
+    grep '«pass,matching-location,'
 }
 
 
-# Tests workaround for special administrative districts
+# FIXME: Tests workaround for special administrative districts
 function fixme-test-taiwan-pd1-mismatch-112079() {
     # from 2021-04-28--asia.original.csv
-    data="Asia,Eastern Asia,Republic of China Taiwan,T'ai-pei,112079,25.162478,121.52402"
-    output=$(echo ${data} | python3 ./gqc.py --no-header -c 'country:2,pd1:3,accession-number:4,latitude:5,longitude:6')
-    s=$? ; echo "«${data}» => «$(echo ${output} | cut -d, -f8-)»"; return $s
+    __check "Asia,Eastern Asia,Republic of China Taiwan,T'ai-pei,112079,25.162478,121.52402" \
+            'country:2,pd1:3,accession-number:4,latitude:5,longitude:6' | \
+    grep '«pass,matching-location,'
 }
 
 
