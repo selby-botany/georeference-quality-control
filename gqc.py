@@ -178,7 +178,7 @@ class Config:
             Config.SECTION_LOCATIONIQ: {
                 'api-host': 'us1.locationiq.com',
                 'api-token': 'you-need-to-configure-your-api-token',
-                'reverse_url_format': (f'https://{{host}}/v1/reverse.php?key={{token}}' + '&' +
+                'reverse-url-format': (f'https://{{host}}/v1/reverse.php?key={{token}}' + '&' +
                                        f'lat={{latitude}}' + '&' +
                                        f'lon={{longitude}}' + '&' +
                                        f'addressdetails=1' + '&' +
@@ -319,16 +319,18 @@ class GQC:
 
     class LocationIQ:
         def __init__(self, gqc):
-            self.gqc = gqc
-            self.__backoff_initial_seconds = float(self.gqc.config.sys_get('backoff-initial-seconds'));
-            self.__backoff_growth_factor = float(self.gqc.config.sys_get('backoff-growth-factor'))
-            self.__backoff_learning_factor = float(self.gqc.config.sys_get('backoff-learning-factor'))
-            self.__host = self.gqc.config.get('api-host', Config.SECTION_LOCATIONIQ)
-            self.__token = self.gqc.config.get('api-token', Config.SECTION_LOCATIONIQ)
+            self.__backoff_initial_seconds = float(gqc.config.sys_get('backoff-initial-seconds'));
+            self.__backoff_growth_factor = float(gqc.config.sys_get('backoff-growth-factor'))
+            self.__backoff_learning_factor = float(gqc.config.sys_get('backoff-learning-factor'))
+            self.__host = gqc.config.get('api-host', Config.SECTION_LOCATIONIQ)
+            self.__token = gqc.config.get('api-token', Config.SECTION_LOCATIONIQ)
+            self.__reverse_url_format = gqc.config.get("reverse-url-format", section=Config.SECTION_LOCATIONIQ)
             if not self.__host:
                 raise ValueError('api-host is not set')
             if not self.__token:
                 raise ValueError('api-token is not set')
+            if not self.__reverse_url_format:
+                raise ValueError('reverse-url-format is not set')
 
         def reverse_geolocate(self, latitude, longitude, wait=True):
             url = self.reverse_geolocate_url(latitude, longitude)
@@ -345,7 +347,7 @@ class GQC:
             return result
 
         def reverse_geolocate_url(self, latitude, longitude):
-            return self.gqc.config.get("reverse_url_format", section=Config.SECTION_LOCATIONIQ).format(host=self.__host, token=self.__token, latitude=latitude, longitude=longitude)
+            return self.__reverse_url_format.format(host=self.__host, token=self.__token, latitude=latitude, longitude=longitude)
 
         def __extract_location(self, response):
             # LocationIQ response 'address' fields to PDx indexed fields
