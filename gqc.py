@@ -181,10 +181,14 @@ class Config:
                 'reverse_url_format': (f'https://{{host}}/v1/reverse.php?key={{token}}' + '&' +
                                        f'lat={{latitude}}' + '&' +
                                        f'lon={{longitude}}' + '&' +
+                                       f'addressdetails=1' + '&' +
+                                       f'extratags=1' + '&' +
+                                       f'matchquality=1' + '&' +
+                                       f'namedetails=1' + '&' +
                                        f'normalizeaddress=1' + '&' +
-                                       f'normalizecity=1&' + '&' +
-                                       f'showdistance=1&' + '&' +
-                                       f'format=json')
+                                       f'normalizecity=1' + '&' +
+                                       f'showdistance=1' + '&' +
+                                       f'format=json'),
             },
             Config.SECTION_SYSTEM: {
                 'argv': sys.argv,
