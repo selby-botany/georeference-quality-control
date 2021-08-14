@@ -697,9 +697,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         response['action'] = 'pass'
         response['reason'] = 'matching-location'
 
-        columns = self.config.active_columns()
-        logging.debug(f'columns {columns}')
-
         row = {k: str(v).strip() for k,v in row.items()}
         logging.debug(f'row {row}')
 
