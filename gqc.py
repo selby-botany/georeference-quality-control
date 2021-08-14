@@ -560,7 +560,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                         # header row
                         append = list(newkeys)
                     else:
-                        row = {k: rawrow[columns[k]] for k in inputkeys}
+                        row = {k: str(rawrow[columns[k]]).strip() for k in inputkeys}
                         logging.debug(f'row[{row_number}]: {json.dumps(row)}')
                         result = self.process_row(row)
                         logging.debug(f'process-row-result[{row_number}] {json.dumps(result)}')
@@ -696,9 +696,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
         response = {k: '' for k in responsekeys}
         response['action'] = 'pass'
         response['reason'] = 'matching-location'
-
-        row = {k: str(v).strip() for k,v in row.items()}
-        logging.debug(f'row {row}')
 
         stringified_row = ''.join(row.values())
         if stringified_row == '':
