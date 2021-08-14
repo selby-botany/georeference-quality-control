@@ -764,8 +764,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
         canonical_row = {}
         try:
-            for k in self.config.location_columns():
-                canonical_row[k] = self.canonicalize.alpha_element(row[k])
             canonical_row['latitude'] = self.canonicalize.latitude(row['latitude'])
             canonical_row['longitude'] = self.canonicalize.longitude(row['longitude'])
         except ValueError as _:
@@ -784,8 +782,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                 logging.debug(f'revloc {revloc}')
                 for k,v in revloc.items():
                     response[f'location-{k}'] = v
-            response['location-latitude'] = self.geometry.canonicalize_latlon(location['lat']) if 'lat' in location else ''
-            response['location-longitude'] = self.geometry.canonicalize_latlon(location['lon']) if 'lon' in location else ''
+            response['location-latitude'] = self.canonicalize.latitude(location['lat']) if 'lat' in location else ''
+            response['location-longitude'] = self.canonicalize.longitude(location['lon']) if 'lon' in location else ''
             response['display-name'] = location['display_name'] if 'display_name' in location else ''
             if response['location-latitude'] and response['location-longitude']:
                 try:
