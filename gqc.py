@@ -468,7 +468,8 @@ class GQC:
         for l in locations:
             logging.debug(f'location {l}')
             reverse = self.reverse_geolocate(l[0], l[1], usecache=True, wait=False)
-            if reverse:
+            logging.debug(f'location {l} => reverse {reverse}')
+            if reverse and 'address' in reverse:
                 reverse_pds = self.extract_reverse_location(reverse['address'])
                 reverse_pds_zip = list(zip(i_pd.values(), reverse_pds.values()))
                 logging.debug(f'reverse_pds_zip {reverse_pds_zip}')
@@ -828,7 +829,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                 if score < self.MIN_FUZZY_SCORE:
                     response['action'] = 'error'
                     response['reason'] = f'{k}-mismatch'
-                    response['note'] = f'input location «{imatch}» ({canonical_row["latitude"]}, {canonical_row["longitude"]}) does not match response location ({self.canonicalize.latitude(response["location-latitude"])}, {self.canonicalize.latitude(response["location-longitude"])}) «{imatch}»'
+                    response['note'] = f'input location «{imatch}» ({canonical_row["latitude"]}, {canonical_row["longitude"]}) does not match response location ({self.canonicalize.latitude(response["location-latitude"])}, {self.canonicalize.latitude(response["location-longitude"])}) «{rmatch}»'
                     response = self.correct_typos(row, response)
                     break
 
