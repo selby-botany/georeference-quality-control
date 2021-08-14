@@ -755,21 +755,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             response['note' ] = '«{row["longitude"]}» must be a floating point (real) number'
             return response
 
-        canonical_row = {}
+        latitude = self.canonicalize.latitude(row['latitude'])
+        longitude = self.canonicalize.longitude(row['longitude'])
         try:
-            canonical_row['latitude'] = self.canonicalize.latitude(row['latitude'])
-            canonical_row['longitude'] = self.canonicalize.longitude(row['longitude'])
-        except ValueError as _:
-            response['action'] = 'ignore'
-            response['reason'] = f'canonicalize-error'
-            return response
-
-        try:
-            location = self.reverse_geolocate(canonical_row['latitude'], canonical_row['longitude'])
-            logging.debug(f'reverse_geolocate({canonical_row["latitude"]}, {canonical_row["longitude"]}) => {location}')
+            location = self.reverse_geolocate(latitude, longitude)
+            logging.debug(f'reverse_geolocate({latitude}, {longitude}) => {location}')
             response['reverse-geolocate-response'] = location
             response['accession-number'] = int(row['accession-number'])
-            response['canonical-input-row'] = canonical_row
             if 'location' in location:
                 revloc = location['location']
                 logging.debug(f'revloc {revloc}')
@@ -777,14 +769,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                     response[f'location-{k}'] = v
             response['location-latitude'] = self.canonicalize.latitude(location['lat']) if 'lat' in location else ''
             response['location-longitude'] = self.canonicalize.longitude(location['lon']) if 'lon' in location else ''
-            response['display-name'] = location['display_name'] if 'display_name' in location else ''
             if response['location-latitude'] and response['location-longitude']:
                 try:
                     response['location-error-distance'] = (
-                        self.geometry.distance(canonical_row['latitude'], 
-                                               canonical_row['longitude'], 
-                                               self.canonicalize.latitude(response['location-latitude']), 
-                                               self.canonicalize.longitude(response['location-longitude'])))
+                        self.geometry.distance(latitude, 
+                                               longitude, 
+                                               response['location-latitude'], 
+                                               response['location-longitude']))
                 except:
                     raise
 
@@ -795,21 +786,21 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                 boundingbox['longitude-east'] and
                 boundingbox['longitude-west']): 
                 response['location-bounding-box-error-distances'] = {
-                    'latitude-north': self.geometry.distance(canonical_row['latitude'], 
-                                                             canonical_row['longitude'], 
+                    'latitude-north': self.geometry.distance(latitude, 
+                                                             longitude, 
                                                              self.canonicalize.latitude(boundingbox['latitude-north']), 
-                                                             canonical_row['longitude']),
-                    'latitude-south': self.geometry.distance(canonical_row['latitude'],
-                                                             canonical_row['longitude'], 
+                                                             longitude),
+                    'latitude-south': self.geometry.distance(latitude,
+                                                             longitude, 
                                                              self.canonicalize.latitude(boundingbox['latitude-south']), 
-                                                             canonical_row['longitude']),
-                    'longitude-east': self.geometry.distance(canonical_row['latitude'], 
-                                                             canonical_row['longitude'], 
-                                                             canonical_row['latitude'], 
+                                                             longitude),
+                    'longitude-east': self.geometry.distance(latitude, 
+                                                             longitude, 
+                                                             latitude, 
                                                              self.canonicalize.longitude(boundingbox['longitude-east'])),
-                    'longitude-west': self.geometry.distance(canonical_row['latitude'], 
-                                                             canonical_row['longitude'], 
-                                                             canonical_row['latitude'], 
+                    'longitude-west': self.geometry.distance(latitude, 
+                                                             longitude, 
+                                                             latitude, 
                                                              self.canonicalize.longitude(boundingbox['longitude-west'])),
                     }
             imatch = []
@@ -823,7 +814,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                 if score < self.MIN_FUZZY_SCORE:
                     response['action'] = 'error'
                     response['reason'] = f'{k}-mismatch'
-                    response['note'] = f'input location «{imatch}» ({canonical_row["latitude"]}, {canonical_row["longitude"]}) does not match response location ({self.canonicalize.latitude(response["location-latitude"])}, {self.canonicalize.latitude(response["location-longitude"])}) «{rmatch}»'
+                    response['note'] = f'input location «{imatch}» ({latitude}, {longitude}) does not match response location ({self.canonicalize.latitude(response["location-latitude"])}, {self.canonicalize.latitude(response["location-longitude"])}) «{rmatch}»'
                     response = self.correct_typos(row, response)
                     break
 
@@ -842,7 +833,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
             response['reason'] = f'reverse-geolocate-error'
             response['note'] = f'error «{exception}»'
             
-        logging.debug(f'response (row {row} ({canonical_row["latitude"]}, {canonical_row["longitude"]})) => {response}')
+        logging.debug(f'response (row {row} ({latitude}, {longitude})) => {response}')
         return response
 
     def reverse_geolocate(self, latitude, longitude, usecache=None, wait=True):
