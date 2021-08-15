@@ -2,6 +2,7 @@
 
 from cache import Cache
 from canonicalize import Canonicalize
+from geometry import Geometry
 from util import Util
 from validate import Validate
 
@@ -10,8 +11,6 @@ import csv
 from datetime import datetime
 import errno
 from fuzzywuzzy import fuzz
-from geopy import distance
-from haversine import haversine, Unit
 import getopt
 import hashlib
 import http
@@ -169,27 +168,6 @@ class Config:
             for o in config.options(s):
                 r[s][o] = config.get(s, o)
         return r
-
-
-class Geometry:
-    def __init__(self, latitude_precision, longitude_precision):
-        self.precision = max(int(latitude_precision), int(longitude_precision))
-
-    def distance(self, start_latitude, start_longitude, end_latitude, end_longitude):
-        result = self.haversine_distance(start_latitude, start_longitude, end_latitude, end_longitude)
-        return self.canonicalize_kilometers(result)
-
-    def geodesic_distance(self, start_latitude, start_longitude, end_latitude, end_longitude):
-        return distance.distance((start_latitude, start_longitude), (end_latitude, end_longitude)).km
-
-    def haversine_distance(self, start_latitude: float, start_longitude: float, end_latitude: float, end_longitude: float) -> float:
-        return haversine((start_latitude, start_longitude), (end_latitude, end_longitude), unit=Unit.KILOMETERS)
-
-    def canonicalize_kilometers(self, distance):
-        return float('{0:.3f}'.format(float(distance)))
-
-    def canonicalize_latlon(self, latlon):
-        return float('{0:.{1}f}'.format(float(latlon),self.precision))
 
 
 class GQC:
