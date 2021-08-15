@@ -77,23 +77,7 @@ class GQC:
 
         self.locationiq = LocationIQ(self.config)
 
-        logging.debug(f'config: {self.config.config}')
-        logging.debug(f'gqc.cache-file: {self.config.value("cache-file")}')
-        logging.debug(f'gqc.cache-enabled: {self.config.value("cache-enabled")}')
-        logging.debug(f'gqc.cache-only: {self.config.value("cache-only")}')
-        logging.debug(f'gqc.column-assignment: {self.config.value("column-assignment")}')
-        logging.debug(f'gqc.column-assignment: {self.config.value("first-line-is-header")}')
-        logging.debug(f'gqc.input: {self.config.value("input")}')
-        logging.debug(f'gqc.latitude-precision: {self.config.value("latitude-precision")}')
-        logging.debug(f'gqc.log-datefmt: {self.config.value("log-datefmt")}')
-        logging.debug(f'gqc.log-encoding: {self.config.value("log-encoding")}')
-        logging.debug(f'gqc.log-file: {self.config.value("log-file")}')
-        logging.debug(f'gqc.log-level: {self.config.value("log-level")}')
-        logging.debug(f'gqc.longitude-precision: {self.config.value("longitude-precision")}')
-        logging.debug(f'gqc.output: {self.config.value("output")}')
-        logging.debug(f'gqc.input: {self.config.value("separator")}')
-        logging.debug(f'location-iq.api-host: {self.config.value("api-host", section=Config.SECTION_LOCATIONIQ)}')
-        logging.debug(f'location-iq.api-token: {self.config.value("api-token", section=Config.SECTION_LOCATIONIQ)}')
+        self.config.log_on_startup()
 
         return
 

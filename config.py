@@ -3,6 +3,7 @@
 import configparser
 from datetime import datetime
 import hashlib
+import logging
 import os
 import re
 import socket
@@ -44,6 +45,25 @@ class Config:
             if re.search("^(country|pd[12345])$", k):
                 result.append(k)
         return sorted(result)
+
+    def log_on_startup(self):
+        logging.debug(f'config: {self.config}')
+        logging.debug(f'gqc.cache-file: {self.value("cache-file")}')
+        logging.debug(f'gqc.cache-enabled: {self.value("cache-enabled")}')
+        logging.debug(f'gqc.cache-only: {self.value("cache-only")}')
+        logging.debug(f'gqc.column-assignment: {self.value("column-assignment")}')
+        logging.debug(f'gqc.column-assignment: {self.value("first-line-is-header")}')
+        logging.debug(f'gqc.input: {self.value("input")}')
+        logging.debug(f'gqc.latitude-precision: {self.value("latitude-precision")}')
+        logging.debug(f'gqc.log-datefmt: {self.value("log-datefmt")}')
+        logging.debug(f'gqc.log-encoding: {self.value("log-encoding")}')
+        logging.debug(f'gqc.log-file: {self.value("log-file")}')
+        logging.debug(f'gqc.log-level: {self.value("log-level")}')
+        logging.debug(f'gqc.longitude-precision: {self.value("longitude-precision")}')
+        logging.debug(f'gqc.output: {self.value("output")}')
+        logging.debug(f'gqc.input: {self.value("separator")}')
+        logging.debug(f'location-iq.api-host: {self.value("api-host", section=Config.SECTION_LOCATIONIQ)}')
+        logging.debug(f'location-iq.api-token: {self.value("api-token", section=Config.SECTION_LOCATIONIQ)}')
 
     def merge(self, dictionary):
         self.config = Util.dict_merge(self.config, dictionary)
