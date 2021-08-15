@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
 from cache import Cache
+from canonicalize import Canonicalize
+
 import configparser
 import copy
 import csv
@@ -26,29 +28,6 @@ import time
 import unicodedata
 import urllib.error
 import urllib.request
-
-
-class Canonicalize:
-    def __init__(self, latitude_precision, longitude_precision):
-        self.latitude_precision = latitude_precision
-        self.longitude_precision = longitude_precision
-
-    def alpha_element(self, element):
-        regex = re.compile('[^a-zA-Z]')
-        e = regex.sub('', unicodedata.normalize('NFKD', str(element)).lower().strip().replace(' ', ''))
-        if e == 'null': e = ''
-        logging.debug(f'element «{element}» => «{e}»')
-        return e
-
-    def latitude(self, latitude):
-        latitude = float(latitude)
-        assert (latitude >= -90 and latitude <= 90), f'latitude "{latitude}" is not a number between -90 and 90'
-        return float('{0:.{1}f}'.format(latitude, self.latitude_precision))
-
-    def longitude(self, longitude):
-        longitude = float(longitude)
-        assert (longitude >= -360 and longitude <= 360), f'longitude "{longitude}" not a number between -360 and 360'
-        return float('{0:.{1}f}'.format(longitude, self.longitude_precision))
 
 
 class Config:
