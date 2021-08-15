@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from cache import Cache
 import configparser
 import copy
 import csv
@@ -25,45 +26,6 @@ import time
 import unicodedata
 import urllib.error
 import urllib.request
-
-
-class Cache:
-    def __init__(self, cache_file):
-        self.cache_file = cache_file
-
-    def dump(self):
-        with open(self.cache_file, 'w+') as cachefile:
-            json.dump(self.__cache, cachefile)
-
-
-    def exists(self, cachekey):
-        assert cachekey, f'Missing cachekey'
-        result = (cachekey in self.__cache)
-        logging.debug(f'key «{cachekey}» => result «{result}»')
-        return result
-
-
-    def get(self, cachekey):
-        assert cachekey, f'Missing cachekey'
-        result = self.__cache[cachekey] if cachekey in self.__cache else None
-        if 'value' in result:
-            result = result['value']
-        logging.debug(f'key «{cachekey}» => result «{result}»')
-        return result
-
-
-    def load(self):
-        cache = {}
-        if os.path.exists(self.cache_file) and os.path.isfile(self.cache_file) and os.access(self.cache_file, os.R_OK) and (os.path.getsize(self.cache_file) >= len('''{}''')):
-            with open(self.cache_file, 'r') as filehandle:
-                cache = json.loads(filehandle.read())
-        self.__cache = cache
-
-    def put(self, cachekey, value):
-        assert cachekey, f'Missing cachekey'
-        self.__cache[cachekey] = {'creation-time': datetime.utcnow().strftime('%Y%m%dT%H%M%S'), 'value': value }
-        self.dump()
-        logging.debug(f'(key «{cachekey}» <= value «{self.__cache[cachekey]})»')
 
 
 class Canonicalize:
