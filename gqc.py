@@ -814,7 +814,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
                 if score < self.MIN_FUZZY_SCORE:
                     response['action'] = 'error'
                     response['reason'] = f'{k}-mismatch'
-                    response['note'] = f'input location «{imatch}» ({latitude}, {longitude}) does not match response location ({self.canonicalize.latitude(response["location-latitude"])}, {self.canonicalize.latitude(response["location-longitude"])}) «{rmatch}»'
+                    response['note'] = f'input location «{imatch}» ({latitude}, {longitude}) does not match response location ({response["location-latitude"]}, {response["location-longitude"]}) «{rmatch}»'
                     response = self.correct_typos(row, response)
                     break
 
