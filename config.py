@@ -22,7 +22,7 @@ class Config:
     SECTION_SYSTEM = '__sys__'
 
     def __init__(self, argv):
-        self.config = self.default_configuration()
+        self.config = Config.default_configuration()
         inifiles = self.sys_get('inifiles')
         iniconfig = configparser.ConfigParser(default_section=Config.SECTION_GQC)
         iniconfig.read(inifiles)
@@ -33,7 +33,8 @@ class Config:
     def active_columns(self):
         return {k:v for k,v in self.get('column-assignment').items() if v >= 0}
 
-    def default_configuration(self):
+    @staticmethod
+    def default_configuration():
         # Generate a request identifier
         timestamp = datetime.utcnow().strftime('%Y%m%dT%H%M%S')
         idtext = 'gqc' + socket.gethostname() + str(os.getpid()) + timestamp

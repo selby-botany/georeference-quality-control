@@ -34,18 +34,19 @@ class GQC:
 
         logging.captureWarnings(True)
 
+        # Create bootstrap logging configuration ... will be reset after options processing
+        c = Config.default_configuration()
+        logging.basicConfig(filename=c[Config.SECTION_GQC]['log-file'],
+                            encoding=c[Config.SECTION_SYSTEM]['logging']['encoding'],
+                            style=c[Config.SECTION_SYSTEM]['logging']['style'],
+                            format=c[Config.SECTION_SYSTEM]['logging']['format'],
+                            datefmt=c[Config.SECTION_SYSTEM]['logging']['datefmt'],
+                            filemode=c[Config.SECTION_SYSTEM]['logging']['filemode'],
+                            level=getattr(logging, c[Config.SECTION_GQC]['log-level'].upper(), getattr(logging, 'DEBUG')))
+
         self.config = Config(argv)
 
         self.doco = Doco(self.config)
-
-        # Initial logging configuration ... will be reset after options processing
-        logging.basicConfig(filename=self.config.value('log-file'),
-                            encoding=self.config.sys_get('logging')['encoding'],
-                            style=self.config.sys_get('logging')['style'],
-                            format=self.config.sys_get('logging')['format'],
-                            datefmt=self.config.sys_get('logging')['datefmt'],
-                            filemode=self.config.sys_get('logging')['filemode'],
-                            level=getattr(logging, self.config.value('log-level').upper(), getattr(logging, 'DEBUG')))
 
         try:
             pathlib.Path(os.path.dirname(self.config.value('cache-file'))).mkdir(parents=True, exist_ok=True)
