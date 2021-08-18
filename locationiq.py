@@ -2,6 +2,7 @@
 
 from config import Config
 
+import copy
 import http
 import json
 import logging
@@ -18,7 +19,7 @@ class LocationIQ:
         self.__backoff_learning_factor = float(config.sys_get('backoff-learning-factor'))
         self.__host = config.get('api-host', Config.SECTION_LOCATIONIQ)
         self.__token = config.get('api-token', Config.SECTION_LOCATIONIQ)
-        self.__reverse_url_format = config.get("reverse-url-format", section=Config.SECTION_LOCATIONIQ)
+        self.__reverse_url_format = config.get('reverse-url-format', section=Config.SECTION_LOCATIONIQ)
         if not self.__host:
             raise ValueError('api-host is not set')
         if not self.__token:
@@ -30,13 +31,22 @@ class LocationIQ:
         url = self.reverse_geolocate_url(latitude, longitude)
         logging.debug(f'request lat={latitude} long={longitude} url={url}')
         # FIXME: Break this down and do error checking
-        result = self.__reverse_geolocate_fetch(url, wait)
-        logging.debug(f'response lat={latitude} long={longitude} result={result}')
-        if result:
-            result = json.loads(result)
-            if 'error' in result:
-                raise RuntimeError(json.dumps(result))
-        result['location'] = self.__extract_location(result)
+        reverse = self.__reverse_geolocate_fetch(url, wait)
+        logging.debug(f'response lat={latitude} long={longitude} result={reverse}')
+        if reverse:
+            reverse = json.loads(reverse)
+            if 'error' in reverse:
+                raise RuntimeError(json.dumps(reverse))
+        result = {}
+        result['location'] = self.__extract_location(reverse)
+        result['latitude'] = reverse['lat']
+        result['longitude'] = reverse['lon']
+        result['position'] = (reverse['lat'], reverse['lon'])
+        result['distance'] = reverse['distance']
+        result['boundingbox'] = copy.deepcopy(reverse['boundingbox'])
+        result['__request_position'] = (latitude, longitude)
+        result['__request_url'] = url
+        result['__response'] = reverse
         logging.debug(f'response lat={latitude} long={longitude} result={result}')
         return result
 
