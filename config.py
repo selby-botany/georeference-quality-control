@@ -26,7 +26,7 @@ class Config:
         inifiles = self.sys_get('inifiles')
         iniconfig = configparser.ConfigParser(default_section=Config.SECTION_GQC)
         iniconfig.read(inifiles)
-        iniconfig = self.__configparser_to_dict(iniconfig)
+        iniconfig = Config.__configparser_to_dict(iniconfig)
         self.merge(iniconfig)
         self._merge_options(argv)
 
@@ -134,7 +134,7 @@ class Config:
         logging.debug(f'gqc.cache-enabled: {self.value("cache-enabled")}')
         logging.debug(f'gqc.cache-only: {self.value("cache-only")}')
         logging.debug(f'gqc.column-assignment: {self.value("column-assignment")}')
-        logging.debug(f'gqc.column-assignment: {self.value("first-line-is-header")}')
+        logging.debug(f'gqc.first-line-is-header: {self.value("first-line-is-header")}')
         logging.debug(f'gqc.input: {self.value("input")}')
         logging.debug(f'gqc.latitude-precision: {self.value("latitude-precision")}')
         logging.debug(f'gqc.log-datefmt: {self.value("log-datefmt")}')
@@ -169,7 +169,8 @@ class Config:
     def value(self, prop, section=None, default=None):
         return self.get(prop, section, default)
 
-    def __configparser_to_dict(self, config):
+    @staticmethod
+    def __configparser_to_dict(config):
         r = {}
         for s in config.sections():
             if not s in r: r[s] = {}
