@@ -135,8 +135,9 @@ class GQC:
             if not self.reverse_geolocate(latitude=0, longitude=0, usecache=False, wait=False):
                 logging.warning('unable to connect to reverse geolocation service: running in --cache-only mode')
                 self.config.put('cache-enabled', '')
-        except :
+        except Exception as e:
             logging.debug(sys.exc_info())
+            logging.warning(e, exc_info=True)
             logging.warning('unable to connect to reverse geolocation service: running in --cache-only mode')
             self.config.put('cache-enabled', '')
 

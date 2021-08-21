@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from config import Config
+from coordinate import Coordinate
 
 import copy
 import http
@@ -39,6 +40,7 @@ class LocationIQ:
                 raise RuntimeError(json.dumps(reverse))
         result = {}
         result['location'] = self.__extract_location(reverse)
+        result['coordinate'] = Coordinate(reverse['lat'], reverse['lon']).to_json()
         result['latitude'] = reverse['lat']
         result['longitude'] = reverse['lon']
         result['position'] = (reverse['lat'], reverse['lon'])
