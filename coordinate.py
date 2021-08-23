@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from dataclasses import asdict, astuple, dataclass, fields
+from dataclasses import asdict, dataclass
 from haversine import haversine, Unit
 import json
 
