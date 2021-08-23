@@ -40,12 +40,17 @@ class LocationIQ:
                 raise RuntimeError(json.dumps(reverse))
         result = {}
         result['location'] = self.__extract_location(reverse)
-        result['coordinate'] = Coordinate(reverse['lat'], reverse['lon']).to_json()
-        result['latitude'] = reverse['lat']
-        result['longitude'] = reverse['lon']
-        result['position'] = (reverse['lat'], reverse['lon'])
-        result['distance'] = reverse['distance']
-        result['boundingbox'] = copy.deepcopy(reverse['boundingbox'])
+        if ('lat' in reverse):
+            result['latitude'] = reverse['lat']
+        if ('lon' in reverse):
+            result['longitude'] = reverse['lon']
+        if (('lat' in reverse) and ('lon' in reverse)):
+            result['coordinate'] = Coordinate(reverse['lat'], reverse['lon']).to_json()
+            result['position'] = (reverse['lat'], reverse['lon'])
+        if ('distance' in reverse):
+            result['distance'] = reverse['distance']
+        if ('boundingbox' in reverse):
+            result['boundingbox'] = copy.deepcopy(reverse['boundingbox'])
         result['__request_position'] = (latitude, longitude)
         result['__request_url'] = url
         result['__response'] = reverse
