@@ -59,7 +59,7 @@ class CoordinateTestCase(unittest.TestCase):
 
     def test___repr__(self):
         coordinate = Coordinate(12.345678, 90.123456)
-        self.assertEqual(repr(coordinate), "Coordinate('latitude'=12.345678,'longitude'=90.123456)")
+        self.assertEqual(repr(coordinate), "Coordinate(latitude=12.345678, longitude=90.123456)")
 
     def test___str__(self):
         coordinate = Coordinate(12.345678, 90.123456)
@@ -83,8 +83,8 @@ class CoordinateTestCase(unittest.TestCase):
     def test__from_json__valid(self):
         c = Coordinate.from_json('{"latitude": 12.345678, "longitude": 90.123456}')
         self.assertEqual(c.__class__.__qualname__, 'Coordinate')
-        self.assertTrue('latitude' in c)
-        self.assertTrue('longitude' in c)
+        self.assertTrue('latitude' in c._fields)
+        self.assertTrue('longitude' in c._fields)
         self.assertEqual(c.latitude, 12.345678)
         self.assertEqual(c.longitude, 90.123456)
 
