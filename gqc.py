@@ -3,6 +3,7 @@
 from cache import Cache
 from canonicalize import Canonicalize
 from config import Config
+from coordinate import Coordinate
 from doco import Doco
 from geometry import Geometry
 from locationiq import LocationIQ
@@ -95,7 +96,7 @@ class GQC:
         matches = []
         for l in locations:
             logging.debug(f'location {l}')
-            reverse = self.reverse_geolocate(l[0], l[1], usecache=True, wait=False)
+            reverse = self.reverse_geolocate(Coordinate(l[0], l[1]), usecache=True, wait=False)
             logging.debug(f'location {l} => reverse {reverse}')
             if reverse and 'location' in reverse:
                 reverse_pds = reverse['location']
@@ -132,7 +133,7 @@ class GQC:
         logging.debug(f'columns: {columns}')
 
         try:
-            if not self.reverse_geolocate(latitude=0, longitude=0, usecache=False, wait=False):
+            if not self.reverse_geolocate(Coordinate(latitude=0, longitude=0), usecache=False, wait=False):
                 logging.warning('unable to connect to reverse geolocation service: running in --cache-only mode')
                 self.config.put('cache-enabled', '')
         except Exception as e:
@@ -259,7 +260,7 @@ class GQC:
         latitude = self.canonicalize.latitude(row['latitude'])
         longitude = self.canonicalize.longitude(row['longitude'])
         try:
-            location = self.reverse_geolocate(latitude, longitude)
+            location = self.reverse_geolocate(Coordinate(latitude, longitude))
             logging.debug(f'reverse_geolocate({latitude}, {longitude}) => {location}')
             response['reverse-geolocate-response'] = location
             response['accession-number'] = int(row['accession-number'])
@@ -337,15 +338,15 @@ class GQC:
         logging.debug(f'response (row {row} ({latitude}, {longitude})) => {response}')
         return response
 
-    def reverse_geolocate(self, latitude, longitude, usecache=None, wait=True):
+    def reverse_geolocate(self, coordinate, usecache=None, wait=True):
         if usecache is None:
             usecache = self.config.value('cache-enabled')
-        cachekey=f'latitude:{latitude},longitude:{longitude}'
+        cachekey=f'latitude:{coordinate.latitude},longitude:{coordinate.longitude}'
         result = {}
         if usecache and self.cache.exists(cachekey):
             result = self.cache.get(cachekey)
         elif not self.config.value("cache-only"):
-            result = self.locationiq.reverse_geolocate(latitude, longitude, wait)
+            result = self.locationiq.reverse_geolocate(coordinate, wait)
             if result and usecache:
                 self.cache.put(cachekey, result)
         return result

@@ -2,6 +2,7 @@
 
 from config import Config
 from coordinate import Coordinate
+from political_division import PoliticalDivision
 
 import copy
 import http
@@ -14,6 +15,8 @@ import urllib.request
 
 
 class LocationIQ:
+    ADDRESS_KEYS = ['country', 'state', 'county', 'city', 'suburb', 'neighbourhood']
+
     def __init__(self, config: Config):
         self.__backoff_initial_seconds = float(config.sys_get('backoff-initial-seconds'));
         self.__backoff_growth_factor = float(config.sys_get('backoff-growth-factor'))
@@ -28,8 +31,10 @@ class LocationIQ:
         if not self.__reverse_url_format:
             raise ValueError('reverse-url-format is not set')
 
-    def reverse_geolocate(self, latitude, longitude, wait=True):
-        url = self.reverse_geolocate_url(latitude, longitude)
+    def reverse_geolocate(self, coordinate: Coordinate, wait=True):
+        latitude = coordinate.latitude
+        longitude = coordinate.longitude
+        url = self.__reverse_geolocate_url(latitude, longitude)
         logging.debug(f'request lat={latitude} long={longitude} url={url}')
         # FIXME: Break this down and do error checking
         reverse = self.__reverse_geolocate_fetch(url, wait)
@@ -57,12 +62,12 @@ class LocationIQ:
         logging.debug(f'response lat={latitude} long={longitude} result={result}')
         return result
 
-    def reverse_geolocate_url(self, latitude, longitude):
+    def __reverse_geolocate_url(self, latitude, longitude):
         return self.__reverse_url_format.format(host=self.__host, token=self.__token, latitude=latitude, longitude=longitude)
 
     def __extract_location(self, response):
         # LocationIQ response 'address' fields to PDx indexed fields
-        keymap = {'country':'country', 'state':'pd1', 'county':'pd2', 'city':'pd3', 'suburb':'pd4', 'neighbourhood':'pd5'}
+        keymap = dict(zip(LocationIQ.ADDRESS_KEYS, PoliticalDivision.POLITICAL_DIVISIONS))
         location = {l:response['address'][k] if (('address' in response) and (k in response['address'])) else '' for k,l in keymap.items()}
         return dict(location)
 
