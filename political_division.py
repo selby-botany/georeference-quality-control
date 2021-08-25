@@ -2,20 +2,21 @@
 
 from copy import deepcopy
 from typing import Dict
+import json
 
 class PoliticalDivision:
     '''A political division as a list of progressively
     finer political divisions beginning with the country'''
 
     POLITICAL_DIVISIONS = ['country', 'pd1', 'pd2', 'pd3', 'pd4', 'pd5']
-    _divisions = {}
+
+    class ____JsonEncoder(json.JSONEncoder):
+        def default(self, o):
+            return o.__dict__
 
     def __init__(self, divisions: Dict[str, str] = {}):
-        for k in self.POLITICAL_DIVISIONS:
-            if k in divisions:
-                self._divisions[k] = divisions[k]
-            else:
-                self._divisions[k] = None
+        self._divisions = { k:None for k in PoliticalDivision.POLITICAL_DIVISIONS }
+        self._divisions |= { k:divisions[k] for k in PoliticalDivision.POLITICAL_DIVISIONS if k in divisions }
 
     def __bool__(self) -> bool:
         return (self.__len__() == 0)
@@ -71,22 +72,30 @@ class PoliticalDivision:
 
     def contract(self) -> Dict[str, str]:
         ''' Remove empty political divisions '''
-        renamed = dict(zip(self.POLITICAL_DIVISIONS, [self._divisions[k] for k in self._divisions if self._divisions[k]]))
+        renamed = dict(zip(PoliticalDivision.POLITICAL_DIVISIONS, [self._divisions[k] for k in self._divisions if self._divisions[k]]))
         result = { k:v for (k,v) in renamed.items() if v }
         return result
 
     def rcontract(self) -> Dict[str, str]:
         ''' Remove "smallest" empty political divisions only (i.e. "from the right")'''
-        rkeys = list(reversed(sorted(self.POLITICAL_DIVISIONS)))
+        rkeys = list(reversed(sorted(PoliticalDivision.POLITICAL_DIVISIONS)))
         result = {}
         append = False
         for k in rkeys:
             if self._divisions[k] or append:
                 result[k] = self._divisions[k]
                 append = True
-        result = { k:result[k] for k in sorted(self.POLITICAL_DIVISIONS) if k in result }
+        result = { k:result[k] for k in sorted(PoliticalDivision.POLITICAL_DIVISIONS) if k in result }
         return result
 
     def to_dict(self) -> Dict[str, str]:
         '''Overrides the default implementation'''
         return deepcopy(self._divisions)
+
+    @staticmethod
+    def from_json(json_text: str = '{}'):
+        return PoliticalDivision(json.loads(json_text))
+
+    def to_json(self) -> str:
+        return json.dumps(self._divisions)
+
