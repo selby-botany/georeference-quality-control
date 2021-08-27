@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 
+from __future__ import annotations
 from collections import namedtuple
+from copy import deepcopy
 from haversine import haversine, Unit
 import json
+from numbers import Number
+from typing import Dict, Union
 
 ____CoordinateBase = namedtuple(typename='____CoordinateBase',
                                 field_names=['latitude', 'longitude'],
@@ -14,7 +18,7 @@ class Coordinate(____CoordinateBase):
             return o.__dict__
 
     @staticmethod
-    def __new__(cls, latitude=0.0, longitude=0.0):
+    def __new__(cls, latitude:Union[Number,str]=0.0, longitude:Union[Number,str]=0.0) -> Coordinate:
         latitude = float(latitude)
         longitude = float(longitude)
         if not (latitude >= -90.0 and latitude <= 90.0):
@@ -28,7 +32,7 @@ class Coordinate(____CoordinateBase):
         return self.to_json()
 
     @staticmethod
-    def from_json(json_text: str):
+    def from_json(json_text: str) -> Coordinate:
         jt = json.loads(json_text)
         result = None
         if (('latitude' in jt) and ('longitude' in jt)):
@@ -40,5 +44,9 @@ class Coordinate(____CoordinateBase):
 
     def to_json(self) -> str:
         return json.dumps(self._asdict(), cls=Coordinate.____CoordinateJsonEncoder)
+
+    def to_dict(self) -> Dict[str, str]:
+        '''Overrides the default implementation'''
+        return deepcopy(self._asdict())
 
 

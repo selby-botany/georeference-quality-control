@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from __future__ import annotations
 from copy import deepcopy
 import json
 from typing import Dict, NamedTuple, Union
@@ -46,7 +47,7 @@ class PoliticalDivision(NamedTuple):
         return deepcopy(self._asdict())
 
     @staticmethod
-    def from_json(json_text: str = '{}'):
+    def from_json(json_text: str = '{}') -> PoliticalDivision:
         result = PoliticalDivision()
         try:
             data = json.loads(json_text)
