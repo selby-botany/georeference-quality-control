@@ -31,18 +31,18 @@ class PoliticalDivision(NamedTuple):
 
     def contract(self) -> Dict[str, str]:
         ''' Remove empty political divisions '''
-        result = dict(zip(PoliticalDivision.POLITICAL_DIVISIONS, list(filter(None, self.to_dict().values()))))
+        result = dict(zip(PoliticalDivision.POLITICAL_DIVISIONS, list(filter(None, self.as_dict().values()))))
         return result
 
     def rcontract(self) -> Dict[str, str]:
         ''' Remove "smallest" empty political divisions only (i.e. "from the right")'''
-        vals = list(self.to_dict().values())
+        vals = list(self.as_dict().values())
         while not vals[-1]:
             vals.pop()
         result = dict(zip(PoliticalDivision.POLITICAL_DIVISIONS, list(vals)))
         return result
 
-    def to_dict(self) -> Dict[str, str]:
+    def as_dict(self) -> Dict[str, str]:
         '''Overrides the default implementation'''
         return deepcopy(self._asdict())
 
@@ -58,6 +58,6 @@ class PoliticalDivision(NamedTuple):
             pass
         return result
 
-    def to_json(self) -> str:
-        return json.dumps(self.to_dict())
+    def as_json(self) -> str:
+        return json.dumps(self.as_dict())
 

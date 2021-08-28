@@ -100,9 +100,9 @@ class CoordinateTestCase(unittest.TestCase):
         c = Coordinate.from_json('{"latitude": 12.345678, "bar": 90.123456}')
         self.assertEqual(c.__class__.__qualname__, 'NoneType')
 
-    def test__to_json(self):
+    def test__as_json(self):
         coordinate = Coordinate(12.345678, 90.123456)
-        self.assertEqual(coordinate.to_json(), '{"latitude": 12.345678, "longitude": 90.123456}')
+        self.assertEqual(coordinate.as_json(), '{"latitude": 12.345678, "longitude": 90.123456}')
 
 
 if __name__ == '__main__':

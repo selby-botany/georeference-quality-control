@@ -8,12 +8,12 @@ class PoliticalDivisionTestCase(unittest.TestCase):
     def test_init_noargs(self):
         pd = PoliticalDivision()
         empty = { k:None for k in PoliticalDivision.POLITICAL_DIVISIONS }
-        self.assertDictEqual(pd.to_dict(), empty)
+        self.assertDictEqual(pd.as_dict(), empty)
 
     def test_init_w_arg(self):
         pd = PoliticalDivision(**{'country': 'Mexico', 'pd1': 'Cabo', 'pd3': 'city', 'pd2': 'county' })
         es = {'country': 'Mexico', 'pd1': 'Cabo', 'pd2': 'county', 'pd3': 'city', 'pd4': None, 'pd5': None }
-        self.assertDictEqual(pd.to_dict(), es)
+        self.assertDictEqual(pd.as_dict(), es)
 
     def test_contains(self):
         pd = PoliticalDivision(**{'country': 'Mexico', 'pd1': 'Cabo', 'pd3': 'city', 'pd2': 'county' })
@@ -37,14 +37,14 @@ class PoliticalDivisionTestCase(unittest.TestCase):
         pd = PoliticalDivision.from_json()
         self.assertIsInstance(pd, PoliticalDivision)
         for k in PoliticalDivision.POLITICAL_DIVISIONS:
-            self.assertTrue(k in pd.to_dict())
+            self.assertTrue(k in pd.as_dict())
             self.assertEqual(getattr(pd, k), None)
 
     def test_from_json__valid__default_2(self):
         pd = PoliticalDivision.from_json('{}')
         self.assertIsInstance(pd, PoliticalDivision)
         for k in PoliticalDivision.POLITICAL_DIVISIONS:
-            self.assertTrue(k in pd.to_dict())
+            self.assertTrue(k in pd.as_dict())
             self.assertEqual(getattr(pd, k, None), None)
 
     def test_from_json__valid_data_1(self):
@@ -52,17 +52,17 @@ class PoliticalDivisionTestCase(unittest.TestCase):
         pd = PoliticalDivision.from_json(json.dumps(data))
         self.assertIsInstance(pd, PoliticalDivision)
         for k in PoliticalDivision.POLITICAL_DIVISIONS:
-            self.assertTrue(k in pd.to_dict())
+            self.assertTrue(k in pd.as_dict())
             if k in data:
                 self.assertEqual(getattr(pd, k), data[k])
             else:
                 self.assertEqual(getattr(pd, k), None)
 
-    def test_to_json__crazy_data_1(self):
+    def test_as_json__crazy_data_1(self):
         pd = PoliticalDivision.from_json(json.dumps('1'))
         self.assertIsInstance(pd, PoliticalDivision)
         for k in PoliticalDivision.POLITICAL_DIVISIONS:
-            self.assertTrue(k in pd.to_dict())
+            self.assertTrue(k in pd.as_dict())
             self.assertEqual(getattr(pd, k), None)
 
     def test_from_json__mixed_data_1(self):
@@ -71,7 +71,7 @@ class PoliticalDivisionTestCase(unittest.TestCase):
         pd = PoliticalDivision.from_json(json.dumps(expected))
         self.assertIsInstance(pd, PoliticalDivision)
         for k in PoliticalDivision.POLITICAL_DIVISIONS:
-            self.assertTrue(k in pd.to_dict())
+            self.assertTrue(k in pd.as_dict())
             if k in data:
                 self.assertEqual(getattr(pd, k), data[k])
             else:
@@ -82,7 +82,7 @@ class PoliticalDivisionTestCase(unittest.TestCase):
         pd = PoliticalDivision.from_json(json.dumps(data))
         self.assertIsInstance(pd, PoliticalDivision)
         for k in PoliticalDivision.POLITICAL_DIVISIONS:
-            self.assertTrue(k in pd.to_dict())
+            self.assertTrue(k in pd.as_dict())
             self.assertEqual(getattr(pd, k), None)
 
     def test_get(self):
@@ -90,7 +90,7 @@ class PoliticalDivisionTestCase(unittest.TestCase):
         pd = PoliticalDivision(**data)
         self.assertIsInstance(pd, PoliticalDivision)
         for k in PoliticalDivision.POLITICAL_DIVISIONS:
-            self.assertTrue(k in pd.to_dict())
+            self.assertTrue(k in pd.as_dict())
             if k in data:
                 self.assertEqual(getattr(pd, k), data[k])
             else:
@@ -111,23 +111,23 @@ class PoliticalDivisionTestCase(unittest.TestCase):
         pd = PoliticalDivision(**{'country': 'Mexico', 'pd1': 'Cabo', 'pd3': 'city', 'pd2': 'county', 'pd5': None })
         self.assertEqual(str(pd), str({'country': 'Mexico', 'pd1': 'Cabo', 'pd2': 'county', 'pd3': 'city'}))
 
-    def test_to_json__valid_data_1(self):
+    def test_as_json__valid_data_1(self):
         data = {'country': 'Mexico', 'pd1': 'Cabo', 'pd3': 'city', 'pd2': 'county' }
         expected = { k:None for k in PoliticalDivision.POLITICAL_DIVISIONS } | data
         pd = PoliticalDivision(**data)
-        self.assertEqual(pd.to_json(), json.dumps(expected))
+        self.assertEqual(pd.as_json(), json.dumps(expected))
 
-    def FIXMEtest_to_json__mixed_data_1(self):
+    def FIXMEtest_as_json__mixed_data_1(self):
         data = {'name': 'Cantina Maria', 'country': 'Mexico', 'address': '1234 Camino Zapata', 'pd1': 'Cabo', 'continent': 'North America', 'pd3': 'city', 'pd2': 'county' }
         expected = { k:None for k in PoliticalDivision.POLITICAL_DIVISIONS } | { k:data[k] for k in PoliticalDivision.POLITICAL_DIVISIONS if k in data }
         pd = PoliticalDivision(**data)
-        self.assertEqual(pd.to_json(), json.dumps(expected))
+        self.assertEqual(pd.as_json(), json.dumps(expected))
 
-    def FIXMEtest_to_json__no_data_1(self):
+    def FIXMEtest_as_json__no_data_1(self):
         data = {'name': 'Cantina Maria', 'countryside': 'Mexico', 'address': '1234 Camino Zapata', 'pd-state': 'Cabo', 'continent': 'North America', 'pd-city': 'city', 'pd-county': 'county' }
         expected = { k:None for k in PoliticalDivision.POLITICAL_DIVISIONS }
         pd = PoliticalDivision(**data)
-        self.assertEqual(pd.to_json(), json.dumps(expected))
+        self.assertEqual(pd.as_json(), json.dumps(expected))
 
 
 

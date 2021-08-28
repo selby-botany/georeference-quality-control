@@ -29,7 +29,7 @@ class Coordinate(____CoordinateBase):
         return result
 
     def __str__(self) -> str:
-        return self.to_json()
+        return self.as_json()
 
     @staticmethod
     def from_json(json_text: str) -> Coordinate:
@@ -42,10 +42,10 @@ class Coordinate(____CoordinateBase):
     def distance(self, coordinate, unit=Unit.METERS) -> float:
         return haversine((self.latitude, self.longitude), (coordinate.latitude, coordinate.longitude), unit)
 
-    def to_json(self) -> str:
+    def as_json(self) -> str:
         return json.dumps(self._asdict(), cls=Coordinate.____CoordinateJsonEncoder)
 
-    def to_dict(self) -> Dict[str, str]:
+    def as_dict(self) -> Dict[str, str]:
         '''Overrides the default implementation'''
         return deepcopy(self._asdict())
 

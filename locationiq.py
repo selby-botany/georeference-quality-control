@@ -18,6 +18,7 @@ class LocationIQ:
     ADDRESS_KEYS = ['country', 'state', 'county', 'city', 'suburb', 'neighbourhood']
 
     def __init__(self, config: Config):
+        type(self).KEYMAP = dict(zip(LocationIQ.ADDRESS_KEYS, PoliticalDivision.POLITICAL_DIVISIONS))
         self.__backoff_initial_seconds = float(config.sys_get('backoff-initial-seconds'));
         self.__backoff_growth_factor = float(config.sys_get('backoff-growth-factor'))
         self.__backoff_learning_factor = float(config.sys_get('backoff-learning-factor'))
@@ -50,7 +51,7 @@ class LocationIQ:
         if ('lon' in reverse):
             result['longitude'] = reverse['lon']
         if (('lat' in reverse) and ('lon' in reverse)):
-            result['coordinate'] = Coordinate(reverse['lat'], reverse['lon']).to_json()
+            result['coordinate'] = Coordinate(reverse['lat'], reverse['lon']).as_json()
             result['position'] = (reverse['lat'], reverse['lon'])
         if ('distance' in reverse):
             result['distance'] = reverse['distance']
@@ -67,8 +68,7 @@ class LocationIQ:
 
     def __extract_location(self, response):
         # LocationIQ response 'address' fields to PDx indexed fields
-        keymap = dict(zip(LocationIQ.ADDRESS_KEYS, PoliticalDivision.POLITICAL_DIVISIONS))
-        location = {l:response['address'][k] if (('address' in response) and (k in response['address'])) else '' for k,l in keymap.items()}
+        location = {l:response['address'][k] if (('address' in response) and (k in response['address'])) else '' for k,l in LocationIQ.KEYMAP.items()}
         return dict(location)
 
     def __reverse_geolocate_fetch(self, url, wait=True):
