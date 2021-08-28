@@ -48,10 +48,21 @@ class LocationTestCase(unittest.TestCase):
     def test_init_w_arg(self):
         c = Coordinate(20.0, -20.0)
         pd = PoliticalDivision(**{'country': 'Mexico', 'pd1': 'Cabo', 'pd3': 'city', 'pd2': 'county' })
-        location = Location(coordinate=c, political_division=pd)
-        self.assertEqual(location.coordinate.as_dict(), {"latitude": 20.0, "longitude": -20.0 })
+        meta = { 'foo': 'bar' }
+        location = Location(coordinate=c, political_division=pd, metadata=meta)
+        self.assertEqual(location.coordinate, c)
+        self.assertEqual(location.coordinate.latitude, 20.0)
+        self.assertEqual(location.coordinate.longitude, -20.0)
+        self.assertDictEqual(location.coordinate.as_dict(), {"latitude": 20.0, "longitude": -20.0 })
         epd = {'country': 'Mexico', 'pd1': 'Cabo', 'pd2': 'county', 'pd3': 'city', 'pd4': None, 'pd5': None }
-        self.assertEqual(location.political_division.as_dict(), epd)
+        self.assertDictEqual(location.political_division.as_dict(), epd)
+        self.assertEqual(location.political_division.country, epd['country'])
+        self.assertEqual(location.political_division.pd1, epd['pd1'])
+        self.assertEqual(location.political_division.pd2, epd['pd2'])
+        self.assertEqual(location.political_division.pd3, epd['pd3'])
+        self.assertEqual(location.political_division.pd4, epd['pd4'])
+        self.assertEqual(location.political_division.pd5, epd['pd5'])
+        self.assertEqual(location.metadata, meta)
 
     def test_eq(self):
         c1 = Coordinate(20.0, -20.0)
