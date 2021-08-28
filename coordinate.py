@@ -13,12 +13,17 @@ ____CoordinateBase = namedtuple(typename='____CoordinateBase',
                                 defaults=[0.0, 0.0])
 
 class Coordinate(____CoordinateBase):
+    """
+    A Coordinate associates a latitude and longitude.
+    """
     class ____CoordinateJsonEncoder(json.JSONEncoder):
+        """ Obligate JSON encoder class """
         def default(self, o):
             return o.__dict__
 
     @staticmethod
     def __new__(cls, latitude:Union[Number,str]=0.0, longitude:Union[Number,str]=0.0) -> Coordinate:
+        """ Constructor """
         latitude = float(latitude)
         longitude = float(longitude)
         if not (latitude >= -90.0 and latitude <= 90.0):
@@ -29,24 +34,27 @@ class Coordinate(____CoordinateBase):
         return result
 
     def __str__(self) -> str:
+        """ Return the coordinate as a JSON string """
         return self.as_json()
+
+    def as_dict(self) -> Dict[str, str]:
+        """ Return the coordinate as a dictionary """
+        return deepcopy(self._asdict())
+
+    def as_json(self) -> str:
+        """ Return the coordinate as JSON text """
+        return json.dumps(self._asdict(), cls=Coordinate.____CoordinateJsonEncoder)
+
+    def distance(self, coordinate: Coordinate, unit: Unit = Unit.METERS) -> float:
+        """ Return the distance between the two coordinates """
+        return haversine((self.latitude, self.longitude), (coordinate.latitude, coordinate.longitude), unit)
 
     @staticmethod
     def from_json(json_text: str) -> Coordinate:
+        """ Return a Coordinate instance from a suitable JSON string or 'None' if not """
         jt = json.loads(json_text)
         result = None
         if (('latitude' in jt) and ('longitude' in jt)):
             result = Coordinate(latitude=jt['latitude'], longitude=jt['longitude'])
         return result
-
-    def distance(self, coordinate, unit=Unit.METERS) -> float:
-        return haversine((self.latitude, self.longitude), (coordinate.latitude, coordinate.longitude), unit)
-
-    def as_json(self) -> str:
-        return json.dumps(self._asdict(), cls=Coordinate.____CoordinateJsonEncoder)
-
-    def as_dict(self) -> Dict[str, str]:
-        '''Overrides the default implementation'''
-        return deepcopy(self._asdict())
-
 
