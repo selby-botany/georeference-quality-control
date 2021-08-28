@@ -9,11 +9,25 @@ class PoliticalDivisionTestCase(unittest.TestCase):
         pd = PoliticalDivision()
         empty = { k:None for k in PoliticalDivision.POLITICAL_DIVISIONS }
         self.assertDictEqual(pd.as_dict(), empty)
+        self.assertEqual(pd.country, None)
+        self.assertEqual(pd.pd1, None)
+        self.assertEqual(pd.pd2, None)
+        self.assertEqual(pd.pd3, None)
+        self.assertEqual(pd.pd4, None)
+        self.assertEqual(pd.pd5, None)
 
     def test_init_w_arg(self):
         pd = PoliticalDivision(**{'country': 'Mexico', 'pd1': 'Cabo', 'pd3': 'city', 'pd2': 'county' })
         es = {'country': 'Mexico', 'pd1': 'Cabo', 'pd2': 'county', 'pd3': 'city', 'pd4': None, 'pd5': None }
         self.assertDictEqual(pd.as_dict(), es)
+        self.assertEqual(pd.country, es['country'])
+        self.assertEqual(pd.pd1, es['pd1'])
+        self.assertEqual(pd.pd2, es['pd2'])
+        self.assertEqual(pd.pd3, es['pd3'])
+        self.assertEqual(pd.pd4, es['pd4'])
+        self.assertEqual(pd.pd5, es['pd5'])
+        for (k,v) in es.items():
+             self.assertEqual(getattr(pd, k), v)
 
     def test_contains(self):
         pd = PoliticalDivision(**{'country': 'Mexico', 'pd1': 'Cabo', 'pd3': 'city', 'pd2': 'county' })
