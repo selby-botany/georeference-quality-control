@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 
+from __future__ import annotations
+
 from config import Config
 from coordinate import Coordinate
+from location import Location
 from political_division import PoliticalDivision
 
 import copy
@@ -17,7 +20,7 @@ import urllib.request
 class LocationIQ:
     ADDRESS_KEYS = ['country', 'state', 'county', 'city', 'suburb', 'neighbourhood']
 
-    def __init__(self, config: Config):
+    def __init__(self, config: Config) -> None:
         type(self).KEYMAP = dict(zip(LocationIQ.ADDRESS_KEYS, PoliticalDivision.POLITICAL_DIVISIONS))
         self.__backoff_initial_seconds = float(config.sys_get('backoff-initial-seconds'));
         self.__backoff_growth_factor = float(config.sys_get('backoff-growth-factor'))
@@ -32,7 +35,8 @@ class LocationIQ:
         if not self.__reverse_url_format:
             raise ValueError('reverse-url-format is not set')
 
-    def reverse_geolocate(self, coordinate: Coordinate, wait=True):
+    def reverse_geolocate(self, coordinate: Coordinate, wait=True) -> Location:
+        result = None
         latitude = coordinate.latitude
         longitude = coordinate.longitude
         url = self.__reverse_geolocate_url(latitude, longitude)
@@ -44,32 +48,27 @@ class LocationIQ:
             reverse = json.loads(reverse)
             if 'error' in reverse:
                 raise RuntimeError(json.dumps(reverse))
-        result = {}
-        result['location'] = self.__extract_location(reverse)
-        if ('lat' in reverse):
-            result['latitude'] = reverse['lat']
-        if ('lon' in reverse):
-            result['longitude'] = reverse['lon']
-        if (('lat' in reverse) and ('lon' in reverse)):
-            result['coordinate'] = Coordinate(reverse['lat'], reverse['lon']).as_json()
-            result['position'] = (reverse['lat'], reverse['lon'])
-        if ('distance' in reverse):
-            result['distance'] = reverse['distance']
-        if ('boundingbox' in reverse):
-            result['boundingbox'] = copy.deepcopy(reverse['boundingbox'])
-        result['__request_position'] = (latitude, longitude)
-        result['__request_url'] = url
-        result['__response'] = reverse
+            if (('lat' in reverse) and ('lon' in reverse) and ('address' in reverse)):
+                c = Coordinate(reverse['lat'], reverse['lon'])
+                pd = PoliticalDivision(**self.__extract_political_division(reverse))
+                meta = {}
+                if ('distance' in reverse):
+                    meta['distance'] = reverse['distance']
+                if ('boundingbox' in reverse):
+                    meta['boundingbox'] = copy.deepcopy(reverse['boundingbox'])
+                meta['__request_position'] = (latitude, longitude)
+                meta['__request_url'] = url
+                meta['__response'] = reverse
+                result = Location(coordinate=c, political_division=pd, metadata=meta)
         logging.debug(f'response lat={latitude} long={longitude} result={result}')
         return result
 
     def __reverse_geolocate_url(self, latitude, longitude):
         return self.__reverse_url_format.format(host=self.__host, token=self.__token, latitude=latitude, longitude=longitude)
 
-    def __extract_location(self, response):
+    def __extract_political_division(self, response):
         # LocationIQ response 'address' fields to PDx indexed fields
-        location = {l:response['address'][k] if (('address' in response) and (k in response['address'])) else '' for k,l in LocationIQ.KEYMAP.items()}
-        return dict(location)
+        return {l:response['address'][k] if (('address' in response) and (k in response['address'])) else '' for k,l in LocationIQ.KEYMAP.items()}
 
     def __reverse_geolocate_fetch(self, url, wait=True):
         ssl._create_default_https_context = ssl._create_unverified_context

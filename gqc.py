@@ -6,6 +6,7 @@ from config import Config
 from coordinate import Coordinate
 from doco import Doco
 from geometry import Geometry
+from location import Location
 from locationiq import LocationIQ
 
 import csv
@@ -98,8 +99,8 @@ class GQC:
             logging.debug(f'location {l}')
             reverse = self.reverse_geolocate(Coordinate(l[0], l[1]), usecache=True, wait=False)
             logging.debug(f'location {l} => reverse {reverse}')
-            if reverse and 'location' in reverse:
-                reverse_pds = reverse['location']
+            if reverse:
+                reverse_pds = reverse.political_division.as_dict()
                 reverse_pds_zip = list(zip(i_pd.values(), reverse_pds.values()))
                 logging.debug(f'reverse_pds_zip {reverse_pds_zip}')
                 scores = [fuzz.token_set_ratio(r[0],r[1]) for r in reverse_pds_zip]
@@ -264,13 +265,12 @@ class GQC:
             logging.debug(f'reverse_geolocate({latitude}, {longitude}) => {location}')
             response['reverse-geolocate-response'] = location
             response['accession-number'] = int(row['accession-number'])
-            if 'location' in location:
-                revloc = location['location']
-                logging.debug(f'revloc {revloc}')
-                for k,v in revloc.items():
-                    response[f'location-{k}'] = v
-            response['location-latitude'] = self.canonicalize.latitude(location['latitude']) if 'latitude' in location else ''
-            response['location-longitude'] = self.canonicalize.longitude(location['longitude']) if 'longitude' in location else ''
+            revloc = location.political_division
+            logging.debug(f'revloc {revloc}')
+            for k,v in revloc.as_dict().items():
+                response[f'location-{k}'] = v
+            response['location-latitude'] = self.canonicalize.latitude(location.coordinate.latitude)
+            response['location-longitude'] = self.canonicalize.longitude(location.coordinate.longitude)
             if response['location-latitude'] and response['location-longitude']:
                 try:
                     response['location-error-distance'] = (
@@ -281,7 +281,7 @@ class GQC:
                 except:
                     raise
 
-            boundingbox = dict(zip(['latitude-south', 'latitude-north', 'longitude-east', 'longitude-west'], (location['boundingbox'] if 'boundingbox' in location else [''] * 4)))
+            boundingbox = dict(zip(['latitude-south', 'latitude-north', 'longitude-east', 'longitude-west'], (location.metadata['boundingbox'] if 'boundingbox' in location.metadata else [''] * 4)))
             response['location-bounding-box'] = boundingbox
             if (boundingbox['latitude-south'] and
                 boundingbox['latitude-north'] and
@@ -338,17 +338,17 @@ class GQC:
         logging.debug(f'response (row {row} ({latitude}, {longitude})) => {response}')
         return response
 
-    def reverse_geolocate(self, coordinate, usecache=None, wait=True):
+    def reverse_geolocate(self, coordinate, usecache=None, wait=True) -> Location:
         if usecache is None:
             usecache = self.config.value('cache-enabled')
         cachekey=f'latitude:{coordinate.latitude},longitude:{coordinate.longitude}'
-        result = {}
+        result = None
         if usecache and self.cache.exists(cachekey):
-            result = self.cache.get(cachekey)
+            result = Location.from_json(self.cache.get(cachekey))
         elif not self.config.value("cache-only"):
             result = self.locationiq.reverse_geolocate(coordinate, wait)
             if result and usecache:
-                self.cache.put(cachekey, result)
+                self.cache.put(cachekey, result.as_json())
         return result
 
 
