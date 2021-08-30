@@ -83,15 +83,13 @@ class GQC:
         assert 'latitude' in inrow, f'missing "latitude" element'
         assert 'longitude' in inrow, f'missing "longitude" element'
         logging.debug(f'response {response}')
-        # First look for reversed signs
-        permutations = [(1, -1), (-1, 1), (-1, -1)]
         columns = self.config.location_columns()
         # convenience variables
         i_p = (self.canonicalize.latitude(inrow['latitude']), self.canonicalize.longitude(inrow['longitude']))
         # the input political devisions in descending order
         i_pd = {c:inrow[c] for c in columns}
         # the list of locations tuples to try
-        locations = [(float(p[0])*float(i_p[0]), float(p[1])*float(i_p[1])) for p in permutations]
+        locations = [(float(p[0])*float(i_p[0]), float(p[1])*float(i_p[1])) for p in [(1, 1), (1, -1), (-1, 1), (-1, -1)]]
         # dictionary mapping each location tuple with it's distance from the input location
         matches = []
         for l in locations:
