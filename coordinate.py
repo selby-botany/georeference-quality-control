@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from collections import namedtuple
+from config import Config
 from copy import deepcopy
 from haversine import haversine, Unit
 import json
@@ -36,6 +37,20 @@ class Coordinate(____CoordinateBase):
     def __str__(self) -> str:
         """ Return the coordinate as a JSON string """
         return self.as_json()
+
+    def almostEqual(self, first, second, delta=None):
+        """True if the two objects are unequal as determined by comparing that
+           the difference between the two objects is more than the given
+           delta.
+
+           If the two objects compare equal then they will automatically
+           compare almost equal.
+        """
+        if delta is None:
+            delta = Config.instance().get('allowable-coordinate-error')
+        if ((not first == second) and (abs(first - second) <= delta)):
+            return False
+        return True
 
     def as_dict(self) -> Dict[str, str]:
         """ Return the coordinate as a dictionary """
