@@ -21,7 +21,12 @@ class Config:
     SECTION_LOCATIONIQ = 'location-iq'
     SECTION_SYSTEM = '__sys__'
 
-    def __init__(self, argv):
+    __instance = None
+
+    def __init__(self, argv=[]):
+        ''' Virtually private constructor. '''
+        if Config.__instance != None:
+            raise Exception('This class is a singleton!')
         self.config = Config.default_configuration()
         inifiles = self.sys_get('inifiles')
         iniconfig = configparser.ConfigParser(default_section=Config.SECTION_GQC)
@@ -65,6 +70,8 @@ class Config:
                 'log-file': f'{taskdotdir}/log/{timestamp}.log',
                 'log-level': 'DEBUG',
                 'longitude-precision': 3,
+                'allowable-coordinate-error': 0.1, # !~ =/- 1 decimeter (100 millimeters)
+                'minimum-fuzzy-score': 70,
                 'output-file': '/dev/stdout',
                 'separator': ',',
             },
@@ -121,6 +128,12 @@ class Config:
         if (section in self.config) and (prop in self.config[section]):
             result = self.config[section][prop]
         return result
+
+    @classmethod
+    def instance(cls, argv=[]):
+        if not cls.__instance:
+            cls.__instance = Config(argv)
+        return cls.__instance
 
     def location_columns(self):
         result = []

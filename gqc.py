@@ -46,8 +46,7 @@ class GQC:
                             filemode=c[Config.SECTION_SYSTEM]['logging']['filemode'],
                             level=getattr(logging, c[Config.SECTION_GQC]['log-level'].upper(), getattr(logging, 'DEBUG')))
 
-        self.config = Config(argv)
-
+        self.config = Config.instance(argv)
         self.doco = Doco(self.config)
 
         try:
