@@ -73,3 +73,5 @@ class Coordinate(____CoordinateBase):
             result = Coordinate(latitude=jt['latitude'], longitude=jt['longitude'])
         return result
 
+    def permutations_by_sign(self):
+        return [ Coordinate(p[0] * self.latitude, p[1] * self.longitude) for p in [(1, 1), (1, -1), (-1, 1), (-1, -1)]]

@@ -85,17 +85,17 @@ class GQC:
         logging.debug(f'response {response}')
         columns = self.config.location_columns()
         # convenience variables
-        i_p = (self.canonicalize.latitude(inrow['latitude']), self.canonicalize.longitude(inrow['longitude']))
+        input_coordinate = Coordinate(self.canonicalize.latitude(inrow['latitude']), self.canonicalize.longitude(inrow['longitude']))
         # the input political devisions in descending order
         i_pd = {c:inrow[c] for c in columns}
         # the list of locations tuples to try
-        locations = [(float(p[0])*float(i_p[0]), float(p[1])*float(i_p[1])) for p in [(1, 1), (1, -1), (-1, 1), (-1, -1)]]
+        coordinates_to_try = input_coordinate.permutations_by_sign()
         # dictionary mapping each location tuple with it's distance from the input location
         matches = []
-        for l in locations:
-            logging.debug(f'location {l}')
-            reverse = self.reverse_geolocate(Coordinate(l[0], l[1]), usecache=True, wait=False)
-            logging.debug(f'location {l} => reverse {reverse}')
+        for coordinate in coordinates_to_try:
+            logging.debug(f'coordinate {coordinate}')
+            reverse = self.reverse_geolocate(coordinate, usecache=True, wait=False)
+            logging.debug(f'coordinate {coordinate} => reverse {reverse}')
             if reverse:
                 reverse_pds = reverse.political_division.as_dict()
                 reverse_pds_zip = list(zip(i_pd.values(), reverse_pds.values()))
@@ -106,14 +106,14 @@ class GQC:
                 logging.debug(f'pdmatches {pdmatches}')
                 nmatch = pdmatches.index(0) if pdmatches.count(0) > 0 else len(pdmatches)
                 if nmatch > 0:
-                    matches.append((nmatch, l, reverse_pds))
+                    matches.append((nmatch, coordinate , reverse_pds))
         if matches:
             best = max(matches, key=lambda match: match[0])
             logging.debug(f'best {best}')
             if best:
                 response['action'] = f'error'
                 response['reason'] = 'coordinate-sign-error'
-                response['note'] = f'suggestion: change location from {i_p} to {best[1]} => {best[2]}'
+                response['note'] = f'suggestion: change location from {input_coordinate} to {best[1]} => {best[2]}'
         logging.debug(f'response {response}')
         return response
 
