@@ -8,6 +8,7 @@ from doco import Doco
 from geometry import Geometry
 from location import Location
 from locationiq import LocationIQ
+from political_division import PoliticalDivision
 
 import csv
 import errno
@@ -83,13 +84,12 @@ class GQC:
         assert 'latitude' in inrow, f'missing "latitude" element'
         assert 'longitude' in inrow, f'missing "longitude" element'
         logging.debug(f'response {response}')
-        columns = self.config.location_columns()
         # convenience variables
-        input_coordinate = Coordinate(self.canonicalize.latitude(inrow['latitude']), self.canonicalize.longitude(inrow['longitude']))
+        in_coordinate = Coordinate(self.canonicalize.latitude(inrow['latitude']), self.canonicalize.longitude(inrow['longitude']))
         # the input political devisions in descending order
-        i_pd = {c:inrow[c] for c in columns}
+        in_pd = PoliticalDivision(**{c:inrow[c] for c in self.config.location_columns()})
         # the list of locations tuples to try
-        coordinates_to_try = input_coordinate.permutations_by_sign()
+        coordinates_to_try = in_coordinate.permutations_by_sign()
         # dictionary mapping each location tuple with it's distance from the input location
         matches = []
         for coordinate in coordinates_to_try:
@@ -97,23 +97,26 @@ class GQC:
             reverse = self.reverse_geolocate(coordinate, usecache=True, wait=False)
             logging.debug(f'coordinate {coordinate} => reverse {reverse}')
             if reverse:
-                reverse_pds = reverse.political_division.as_dict()
-                reverse_pds_zip = list(zip(i_pd.values(), reverse_pds.values()))
-                logging.debug(f'reverse_pds_zip {reverse_pds_zip}')
-                scores = [fuzz.token_set_ratio(r[0],r[1]) for r in reverse_pds_zip]
-                logging.debug(f'scores {scores}')
-                pdmatches = list(map(lambda x: 1 if x >= self.MIN_FUZZY_SCORE else 0, scores))
-                logging.debug(f'pdmatches {pdmatches}')
-                nmatch = pdmatches.index(0) if pdmatches.count(0) > 0 else len(pdmatches)
-                if nmatch > 0:
-                    matches.append((nmatch, coordinate , reverse_pds))
+                comparison = in_pd.fuzzy_compare(reverse.political_division)
+                if comparison.is_equal:
+                    matches.append((comparison.nmatches, coordinate , comparison))
+                # reverse_pds = reverse.political_division.as_dict()
+                # reverse_pds_zip = list(zip(in_pd.values(), reverse_pds.values()))
+                # logging.debug(f'reverse_pds_zip {reverse_pds_zip}')
+                # scores = [fuzz.token_set_ratio(r[0],r[1]) for r in reverse_pds_zip]
+                # logging.debug(f'scores {scores}')
+                # pdmatches = list(map(lambda x: 1 if x >= self.MIN_FUZZY_SCORE else 0, scores))
+                # logging.debug(f'pdmatches {pdmatches}')
+                # nmatch = pdmatches.index(0) if pdmatches.count(0) > 0 else len(pdmatches)
+                # if nmatch > 0:
+                #     matches.append((nmatch, coordinate , reverse_pds))
         if matches:
             best = max(matches, key=lambda match: match[0])
             logging.debug(f'best {best}')
             if best:
                 response['action'] = f'error'
                 response['reason'] = 'coordinate-sign-error'
-                response['note'] = f'suggestion: change location from {input_coordinate} to {best[1]} => {best[2]}'
+                response['note'] = f'suggestion: change location from {in_coordinate} to {best[1]} => {best[2].other}'
         logging.debug(f'response {response}')
         return response
 

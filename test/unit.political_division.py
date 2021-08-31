@@ -29,6 +29,25 @@ class PoliticalDivisionTestCase(unittest.TestCase):
         for (k,v) in es.items():
              self.assertEqual(getattr(pd, k), v)
 
+    def test_as_json__crazy_data_1(self):
+        pd = PoliticalDivision.from_json(json.dumps('1'))
+        self.assertIsInstance(pd, PoliticalDivision)
+        for k in PoliticalDivision.POLITICAL_DIVISIONS:
+            self.assertTrue(k in pd.as_dict())
+            self.assertEqual(getattr(pd, k), None)
+
+    def test_as_json__valid_data_1(self):
+        data = {'country': 'Mexico', 'pd1': 'Cabo', 'pd3': 'city', 'pd2': 'county' }
+        expected = { k:None for k in PoliticalDivision.POLITICAL_DIVISIONS } | data
+        pd = PoliticalDivision(**data)
+        self.assertEqual(pd.as_json(), json.dumps(expected))
+
+    def FIXMEtest_as_json__no_data_1(self):
+        data = {'name': 'Cantina Maria', 'countryside': 'Mexico', 'address': '1234 Camino Zapata', 'pd-state': 'Cabo', 'continent': 'North America', 'pd-city': 'city', 'pd-county': 'county' }
+        expected = { k:None for k in PoliticalDivision.POLITICAL_DIVISIONS }
+        pd = PoliticalDivision(**data)
+        self.assertEqual(pd.as_json(), json.dumps(expected))
+
     def test_contains(self):
         pd = PoliticalDivision(**{'country': 'Mexico', 'pd1': 'Cabo', 'pd3': 'city', 'pd2': 'county' })
         for k in PoliticalDivision.POLITICAL_DIVISIONS:
@@ -72,13 +91,6 @@ class PoliticalDivisionTestCase(unittest.TestCase):
             else:
                 self.assertEqual(getattr(pd, k), None)
 
-    def test_as_json__crazy_data_1(self):
-        pd = PoliticalDivision.from_json(json.dumps('1'))
-        self.assertIsInstance(pd, PoliticalDivision)
-        for k in PoliticalDivision.POLITICAL_DIVISIONS:
-            self.assertTrue(k in pd.as_dict())
-            self.assertEqual(getattr(pd, k), None)
-
     def test_from_json__mixed_data_1(self):
         data = {'name': 'Cantina Maria', 'country': 'Mexico', 'address': '1234 Camino Zapata', 'pd1': 'Cabo', 'continent': 'North America', 'pd3': 'city', 'pd2': 'county' }
         expected = { k:None for k in PoliticalDivision.POLITICAL_DIVISIONS } | { k:data[k] for k in PoliticalDivision.POLITICAL_DIVISIONS if k in data }
@@ -99,6 +111,20 @@ class PoliticalDivisionTestCase(unittest.TestCase):
             self.assertTrue(k in pd.as_dict())
             self.assertEqual(getattr(pd, k), None)
 
+    def test_fuzzy_compare_trivial_1(self):
+        pd1 = PoliticalDivision(country='United States', pd1='Florida')
+        pd2 = PoliticalDivision(country='United States', pd1='Florida')
+        r = pd1.fuzzy_compare(pd2)
+        self.assertEqual(6, r.nmatches)
+        self.assertTrue(r.is_equal)
+
+    def test_fuzzy_compare_1(self):
+        pd1 = PoliticalDivision(country='United States', pd1='Florida')
+        pd2 = PoliticalDivision(country='United States of America', pd1='Florida')
+        r = pd1.fuzzy_compare(pd2)
+        self.assertEqual(6, r.nmatches)
+        self.assertTrue(r.is_equal)
+
     def test_get(self):
         data = {'country': 'Mexico', 'pd1': 'Cabo', 'pd3': 'city', 'pd2': 'county' }
         pd = PoliticalDivision(**data)
@@ -109,6 +135,16 @@ class PoliticalDivisionTestCase(unittest.TestCase):
                 self.assertEqual(getattr(pd, k), data[k])
             else:
                 self.assertEqual(getattr(pd, k), None)
+
+    def test_fuzzy_compare_trivial_1(self):
+        pd1 = PoliticalDivision(country='United States', pd1='Florida')
+        pd2 = PoliticalDivision(country='United States', pd1='Florida')
+        self.assertTrue(pd1.is_equal(pd2))
+
+    def test_fuzzy_compare_1(self):
+        pd1 = PoliticalDivision(country='United States', pd1='Florida')
+        pd2 = PoliticalDivision(country='United States of America', pd1='Florida')
+        self.assertTrue(pd1.is_equal(pd2))
 
     def test_rcontract__pass1(self):
         pd = PoliticalDivision(**{'country': 'Mexico', 'pd1': 'Cabo', 'pd4': 'neighborhood' })
@@ -124,24 +160,6 @@ class PoliticalDivisionTestCase(unittest.TestCase):
     def test_str(self):
         pd = PoliticalDivision(**{'country': 'Mexico', 'pd1': 'Cabo', 'pd3': 'city', 'pd2': 'county', 'pd5': None })
         self.assertEqual(str(pd), str({'country': 'Mexico', 'pd1': 'Cabo', 'pd2': 'county', 'pd3': 'city'}))
-
-    def test_as_json__valid_data_1(self):
-        data = {'country': 'Mexico', 'pd1': 'Cabo', 'pd3': 'city', 'pd2': 'county' }
-        expected = { k:None for k in PoliticalDivision.POLITICAL_DIVISIONS } | data
-        pd = PoliticalDivision(**data)
-        self.assertEqual(pd.as_json(), json.dumps(expected))
-
-    def FIXMEtest_as_json__mixed_data_1(self):
-        data = {'name': 'Cantina Maria', 'country': 'Mexico', 'address': '1234 Camino Zapata', 'pd1': 'Cabo', 'continent': 'North America', 'pd3': 'city', 'pd2': 'county' }
-        expected = { k:None for k in PoliticalDivision.POLITICAL_DIVISIONS } | { k:data[k] for k in PoliticalDivision.POLITICAL_DIVISIONS if k in data }
-        pd = PoliticalDivision(**data)
-        self.assertEqual(pd.as_json(), json.dumps(expected))
-
-    def FIXMEtest_as_json__no_data_1(self):
-        data = {'name': 'Cantina Maria', 'countryside': 'Mexico', 'address': '1234 Camino Zapata', 'pd-state': 'Cabo', 'continent': 'North America', 'pd-city': 'city', 'pd-county': 'county' }
-        expected = { k:None for k in PoliticalDivision.POLITICAL_DIVISIONS }
-        pd = PoliticalDivision(**data)
-        self.assertEqual(pd.as_json(), json.dumps(expected))
 
 
 
