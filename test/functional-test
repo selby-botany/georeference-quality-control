@@ -23,8 +23,8 @@ function __check() {
 }
 
 
-# FIXME test-asia-pd1-mismatch-55720
-function fixme-test-asia-pd1-mismatch-55720() {
+# Needs both fuzzy match and contraction to succeed
+function test-asia-pd1-mismatch-55720() {
     # from 2021-04-28--asia.results.csv
     __check 'Asia,South-Eastern Asia,Brunei,Temburong,55720,4.303602,115.332264' \
             'country:2,pd1:3,accession-number:4,latitude:5,longitude:6' | \
@@ -40,8 +40,8 @@ function test-bolivia-pass-47568() {
 }
 
 
-# FIXME: Tests fuzzy country name match: Jamaica == Jamaika?
-function fixme-test-caribbean-pd1-mismatch-101721() {
+# Tests fuzzy country name match: Jamaica == Jamaika?
+function test-caribbean-pd1-mismatch-101721() {
     # from 2021-04-28--caribbean.results.csv
     __check 'Caribbean,Jamaica,Clarendon,101721,18.167479,-77.329748' \
             'country:1,pd1:2,accession-number:3,latitude:4,longitude:5' | \
@@ -49,17 +49,17 @@ function fixme-test-caribbean-pd1-mismatch-101721() {
 }
 
 
-# FIXME: Tests fuzzy country name match: Bahamas == The Bahamas
-function fixme-test-caribbean-pd1-mismatch-20057() {
+# Tests fuzzy country name match: Bahamas == The Bahamas
+function test-caribbean-pd1-mismatch-20057() {
     # from 2021-04-28--caribbean.results.csv
     __check 'Caribbean,Bahamas,North Andros,20057,24.897342,-77.933323' \
             'country:1,pd1:2,accession-number:3,latitude:4,longitude:5' | \
-    grep '«error,pd1-mismatch,'
+    grep '«pass,matching-location,'
 }
 
 
-# FIXME: Tests ability to detect a flipped sign on longitude
-function fixme-test-colombia-coordinate-sign-error-48822() {
+# Tests ability to detect a flipped sign on longitude
+function test-colombia-coordinate-sign-error-48822() {
     # from 2021-04-28/2021-04-28--colombia--1.original.csv
     __check 'Colombia,Antioquia,48822,6.329973,75.647688' | \
     grep '«error,coordinate-sign-error,'
@@ -100,8 +100,8 @@ function test-usa-country-mismatch-112841() {
 }
 
 
-# FIXME: Tests workaround for special administrative districts
-function fixme-test-taiwan-pd1-mismatch-112079() {
+# Tests workaround for special administrative districts
+function test-taiwan-pd1-mismatch-112079() {
     # from 2021-04-28--asia.original.csv
     __check "Asia,Eastern Asia,Republic of China Taiwan,T'ai-pei,112079,25.162478,121.52402" \
             'country:2,pd1:3,accession-number:4,latitude:5,longitude:6' | \
@@ -111,19 +111,20 @@ function fixme-test-taiwan-pd1-mismatch-112079() {
 
 
 function run-tests() {
+    filter=${1:-'.*'}
     status=0
-    for test in $(declare -F | awk '{ print $3 }' | grep '^test-'); do
+    for test in $(declare -F | awk '{ print $3 }' | grep -E '^test-' | grep -E "${filter}"); do
         result=$(${test})
         s=$?
         r='FAIL'
         if [[ ${s} -eq 0 ]]; then
             r='PASS'
         fi
-        echo "${r}: ${test}: ${result}"
+        echo "${r}: ${test}"
         status=$(($status && $s))
     done
     exit $status
 }
 
-run-tests
+run-tests "${@}"
 
