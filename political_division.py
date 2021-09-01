@@ -27,6 +27,7 @@ class PoliticalDivision(NamedTuple):
 
     class FuzzyCompareResult(NamedTuple):
         is_equal: bool
+        is_contracted: bool
         this: PoliticalDivision
         other: PoliticalDivision
         inputs: Dict[str,Tuple[str,str]]
@@ -40,7 +41,7 @@ class PoliticalDivision(NamedTuple):
 
     def __str__(self) -> str:
         """ Display the right contraction as the string form """
-        return self.rcontract().__str__()
+        return str(self.rcontract())
 
     def as_dict(self) -> Dict[str, str]:
         '''Overrides the default implementation'''
@@ -51,9 +52,25 @@ class PoliticalDivision(NamedTuple):
 
     def contract(self) -> Dict[str, str]:
         ''' Remove empty political divisions '''
-        result = dict(zip(PoliticalDivision.POLITICAL_DIVISIONS, list(filter(None, self.as_dict().values()))))
+        nonempty_elements = list(filter(None, self.as_dict().values()))
+        divisions = PoliticalDivision.POLITICAL_DIVISIONS[0 : len(nonempty_elements) - 1]
+        result = dict(zip(PoliticalDivision.POLITICAL_DIVISIONS, nonempty_elements))
         return result
-    
+
+    def contraction(self) -> PoliticalDivision:
+        ''' Remove empty political divisions '''
+        return PoliticalDivision(**self.contract())
+
+    def first_different_division(self, other, contract=False):
+        result = None
+        comparison = self.fuzzy_compare(other, contract)
+        for (k,v) in comparison.matches.items():
+            if not v:
+                result = k
+                break
+        return result
+
+
     @staticmethod
     def from_json(json_text: str = '{}') -> PoliticalDivision:
         result = PoliticalDivision()
@@ -66,34 +83,36 @@ class PoliticalDivision(NamedTuple):
             pass
         return result
 
-    def fuzzy_compare(self, other: PoliticalDivision, contract=False, rcontract=True) -> FuzzyCompareResult:
+    def fuzzy_compare(self, other: PoliticalDivision, contract=False) -> FuzzyCompareResult:
         _empty = { k: None for k in self._fields }
-        _other = other.as_dict()
-        _self = self.as_dict()
         if contract:
             _other = other.contract()
             _self = self.contract()
-        if rcontract:
-            _other = other.rcontract()
-            _self = self.rcontract()
+        else:
+            _other = other.contract()
+            _self = self.contract()
         _self = { **_empty, **_self}
         _other = { **_empty, **_other}
-        inputs = { f: (_self[f], _other[f]) for f in self._fields }
+        inputs = { f: (str(_self[f]).strip().lower(), str(_other[f]).strip().lower()) for f in self._fields }
         equality = { f: (i[0] == i[1]) for (f, i) in inputs.items() }
         scores = { f: fuzz.token_set_ratio(i[0], i[1]) for (f, i) in inputs.items() }
         matches = { f: (equality[f] or (s >= self.MIN_FUZZY_SCORE)) for (f, s) in scores.items() }
         matchvs = list(matches.values())
         nmatches = matchvs.index(0) if matchvs.count(0) > 0 else len(matchvs)
         is_equal = (nmatches > 0)
-        result = PoliticalDivision.FuzzyCompareResult(is_equal, self, other, inputs, scores, matches, nmatches)
+        result = PoliticalDivision.FuzzyCompareResult(is_equal, contract, self, other, inputs, scores, matches, nmatches)
         return result
 
-    def is_equal(self, other: PoliticalDivision, contract=False, rcontract=True) -> bool:
-        compare = self.fuzzy_compare(other, contract, rcontract)
-        return compare.is_equal
+    def is_equal(self, other: PoliticalDivision, contract: bool = False) -> bool:
+        nonemptyfields = len(list(filter(None, self.as_dict().values())))
+        compare = self.fuzzy_compare(other, contract=contract)
+        return (compare.nmatches >= nonemptyfields)
 
+    def is_equal_contracted(self, other: PoliticalDivision) -> bool:
+        return self.is_equal(other, contract=True)
+    
     def rcontract(self) -> Dict[str, str]:
-        ''' Remove "smallest" empty political divisions only (i.e. "from the right")'''
+        """ Remove "smallest" empty political divisions only (i.e. "from the right") """
         vals = list(self.as_dict().values())
         while ((len(vals) > 0) and (not vals[-1])):
             vals.pop()
