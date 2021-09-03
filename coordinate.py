@@ -38,7 +38,7 @@ class Coordinate(____CoordinateBase):
         """ Return the coordinate as a JSON string """
         return self.as_json()
 
-    def almostEqual(self, first, second, delta=None):
+    def almostEqual(self, other: Coordinate, delta: float = None) -> bool:
         """True if the two objects are unequal as determined by comparing that
            the difference between the two objects is more than the given
            delta.
@@ -48,7 +48,7 @@ class Coordinate(____CoordinateBase):
         """
         if delta is None:
             delta = Config.instance().get('allowable-coordinate-error')
-        if ((not first == second) and (abs(first - second) <= delta)):
+        if (self.distance(other) > delta):
             return False
         return True
 
