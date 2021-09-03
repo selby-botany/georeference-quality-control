@@ -56,7 +56,7 @@ class LocationIQ:
                     meta['distance'] = reverse['distance']
                 if ('boundingbox' in reverse):
                     meta['boundingbox'] = copy.deepcopy(reverse['boundingbox'])
-                meta['__request_position'] = (latitude, longitude)
+                meta['__request_position'] = coordinate
                 meta['__request_url'] = url
                 meta['__response'] = reverse
                 result = Location(coordinate=c, political_division=pd, metadata=meta)
