@@ -70,7 +70,7 @@ class Config:
                 'log-file': f'{taskdotdir}/log/{timestamp}.log',
                 'log-level': 'DEBUG',
                 'longitude-precision': 3,
-                'allowable-coordinate-error': 0.1, # !~ =/- 1 decimeter (100 millimeters)
+                'allowable-coordinate-error': 100, # !~ =/- 100 meters
                 'minimum-fuzzy-score': 70,
                 'output-file': '/dev/stdout',
                 'separator': ',',
