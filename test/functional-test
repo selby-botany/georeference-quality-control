@@ -18,7 +18,7 @@ function __check() {
     local s=$?
     local rf=$(($maxcolumn+2))
     local result=$(echo ${output} | cut -d, -f${rf}-)
-    echo "«${data}» => «${result}»"
+    echo "❬${data}❭ => «${result}»"
     return ${s}
 }
 
@@ -40,7 +40,7 @@ function test-bolivia-pass-47568() {
 }
 
 
-# Tests fuzzy country name match: Jamaica == Jamaika?
+# Tests fuzzy simple pd1 name match: Clarendon != Middlesex County
 function test-caribbean-pd1-mismatch-101721() {
     # from 2021-04-28--caribbean.results.csv
     __check 'Caribbean,Jamaica,Clarendon,101721,18.167479,-77.329748' \
@@ -74,6 +74,14 @@ function test-malawi-pass-23666() {
     grep '«pass,matching-location,'
 }
 
+
+# Tests detection of territories being confused with countries
+function test-new-caledonia-country-mismatch-409() {
+    # from 2021-04-28/2021-04-28--africa.original.csv
+    __check 'Oceania,Melanesia,New Caledonia,South,409,-21.69857,165.984831' \
+            'country:2,pd1:3,accession-number:4,latitude:5,longitude:6' | \
+    grep '«error,country-is-territory,'
+}
 
 # FIXME: Tests an (currently) unrecoverable error -- same number erroneously c&p into lat and long
 function fixme-test-panama-country-mismatch-13735() {
@@ -120,7 +128,7 @@ function run-tests() {
         if [[ ${s} -eq 0 ]]; then
             r='PASS'
         fi
-        echo "${r}: ${test}"
+        echo "INFO: ${r}: ${test}"
         status=$(($status && $s))
     done
     exit $status
