@@ -5,6 +5,7 @@ from copy import deepcopy
 from fuzzywuzzy import fuzz
 import json
 import logging
+import string
 from typing import Dict, NamedTuple, Union
 
 
@@ -93,9 +94,10 @@ class PoliticalDivision(NamedTuple):
             _self = self.contract()
         _self = { **_empty, **_self}
         _other = { **_empty, **_other}
-        inputs = { f: (str(_self[f]).strip().lower(), str(_other[f]).strip().lower()) for f in self._fields }
+        inputs = { f: (str(_self[f]).strip().lower().translate(str.maketrans('', '', string.punctuation)),
+                       str(_other[f]).strip().lower().translate(str.maketrans('', '', string.punctuation))) for f in self._fields }
         equality = { f: (i[0] == i[1]) for (f, i) in inputs.items() }
-        scores = { f: fuzz.token_set_ratio(i[0], i[1]) for (f, i) in inputs.items() }
+        scores = { f: fuzz.token_set_ratio(i[0], i[1]) for (f, i) in inputs.items() if i[0] or i[1] }
         matches = { f: (equality[f] or (s >= self.MIN_FUZZY_SCORE)) for (f, s) in scores.items() }
         matchvs = list(matches.values())
         nmatches = matchvs.index(0) if matchvs.count(0) > 0 else len(matchvs)
