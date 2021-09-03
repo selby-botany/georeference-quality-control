@@ -19,15 +19,14 @@ import os.path
 import pathlib
 import re
 import sys
+from typing import Any, Dict
 import urllib.error
 
 
 class GQC:
     '''Geolocation Quality Control (gqc)'''
-
     SUPER_VERBOSE = False
     MIN_FUZZY_SCORE = 85
-
     __instance = None
 
     def __init__(self, argv):
@@ -74,9 +73,54 @@ class GQC:
         return
 
 
-    def correct_typos(self, inrow, _response):
-        result = self.correct_sign_swap_typos(inrow, _response)
-        return result
+    def copy_location_to_response(self, coordinate: Coordinate, location: Location, response: Dict[str,Any]):
+        logging.debug(f'coordinate {coordinate} [{type(coordinate)}]')
+        logging.debug(f' location {location} [{type(location)}]')
+        logging.debug(f'response {response} [{type(response)}]')
+        location_coordinate = location.coordinate
+        latitude = self.canonicalize.latitude(location_coordinate.latitude)
+        longitude = self.canonicalize.longitude(location_coordinate.longitude)
+        political_division = location.political_division
+        for k,v in political_division.as_dict().items():
+            response[f'location-{k}'] = v
+        response['location-latitude'] = self.canonicalize.latitude(latitude)
+        response['location-longitude'] = self.canonicalize.longitude(longitude)
+        response['location-error-distance'] = coordinate.distance(location_coordinate)
+        boundingbox = dict(zip(['latitude-south', 'latitude-north', 'longitude-east', 'longitude-west'], (location.metadata['boundingbox'] if 'boundingbox' in location.metadata else [''] * 4)))
+        response['location-bounding-box'] = boundingbox
+        if (boundingbox['latitude-south'] and boundingbox['latitude-north'] and boundingbox['longitude-east'] and boundingbox['longitude-west']): 
+            response['location-bounding-box-error-distances'] = {
+                'latitude-north': self.geometry.distance(latitude, longitude, self.canonicalize.latitude(boundingbox['latitude-north']), longitude),
+                'latitude-south': self.geometry.distance(latitude, longitude, self.canonicalize.latitude(boundingbox['latitude-south']), longitude),
+                'longitude-east': self.geometry.distance(latitude, longitude, latitude, self.canonicalize.longitude(boundingbox['longitude-east'])),
+                'longitude-west': self.geometry.distance(latitude, longitude, latitude, self.canonicalize.longitude(boundingbox['longitude-west'])),
+                }
+        logging.debug(f'location {location} => {response}')
+
+
+    def correct_for_territories(self, inrow, response):
+        logging.debug(f'inrow {inrow}')
+        assert 'latitude' in inrow, f'missing "latitude" element'
+        assert 'longitude' in inrow, f'missing "longitude" element'
+        logging.debug(f'response {response}')
+        # convenience variables
+        coordinate = Coordinate(self.canonicalize.latitude(inrow['latitude']), self.canonicalize.longitude(inrow['longitude']))
+        # the input political devisions in descending order
+        pd = PoliticalDivision(**{c:inrow[c] for c in self.config.location_columns()})
+        logging.debug(f'pd {pd}')
+
+        location = self.reverse_geolocate(coordinate, usecache=True, wait=False)
+        if location:
+            shifted_pds = [location.political_division.country] + list(pd)
+            shifted_pd = PoliticalDivision(**dict(zip(location.political_division._fields, shifted_pds)))
+            logging.debug(f'shifted_pd {shifted_pd}')
+            comparison = shifted_pd.fuzzy_compare(location.political_division)
+            if comparison.is_equal:
+                response['action'] = f'error'
+                response['reason'] = f'country-is-territory'
+                response['note'] = f'suggestion: change location of {coordinate} from {pd} => {location.political_division}'
+                self.copy_location_to_response(coordinate, Location(coordinate, location.political_division), response)
+        return response
 
 
     def correct_sign_swap_typos(self, inrow, response):
@@ -94,31 +138,35 @@ class GQC:
         matches = []
         for coordinate in coordinates_to_try:
             logging.debug(f'coordinate {coordinate}')
-            reverse = self.reverse_geolocate(coordinate, usecache=True, wait=False)
-            logging.debug(f'coordinate {coordinate} => reverse {reverse}')
-            if reverse:
-                comparison = in_pd.fuzzy_compare(reverse.political_division)
+            location = self.reverse_geolocate(coordinate, usecache=True, wait=False)
+            logging.debug(f'reverse_geolocate: coordinate {coordinate} => location {location}')
+            if location:
+                comparison = in_pd.fuzzy_compare(location.political_division)
                 if comparison.is_equal:
-                    matches.append((comparison.nmatches, coordinate , comparison))
-                # reverse_pds = reverse.political_division.as_dict()
-                # reverse_pds_zip = list(zip(in_pd.values(), reverse_pds.values()))
-                # logging.debug(f'reverse_pds_zip {reverse_pds_zip}')
-                # scores = [fuzz.token_set_ratio(r[0],r[1]) for r in reverse_pds_zip]
-                # logging.debug(f'scores {scores}')
-                # pdmatches = list(map(lambda x: 1 if x >= self.MIN_FUZZY_SCORE else 0, scores))
-                # logging.debug(f'pdmatches {pdmatches}')
-                # nmatch = pdmatches.index(0) if pdmatches.count(0) > 0 else len(pdmatches)
-                # if nmatch > 0:
-                #     matches.append((nmatch, coordinate , reverse_pds))
+                    matches.append((comparison.nmatches, coordinate, comparison, location))
         if matches:
             best = max(matches, key=lambda match: match[0])
             logging.debug(f'best {best}')
             if best:
-                response['action'] = f'error'
-                response['reason'] = 'coordinate-sign-error'
-                response['note'] = f'suggestion: change location from {in_coordinate} to {best[1]} => {best[2].other}'
+                if best[3].coordinate.almostEqual(in_coordinate):
+                    response['action'] = f'pass'
+                    response['reason'] = f'matching-location'
+                else:
+                    # Our "best" is different the original coordinate
+                    distance = best[3].coordinate.distance(in_coordinate)
+                    response['action'] = f'error'
+                    response['reason'] = f'coordinate-sign-error'
+                    response['note'] = f'suggestion: change location from {in_coordinate} to {best[1]} => {best[2].other}'
+                self.copy_location_to_response(in_coordinate, best[3], response)
         logging.debug(f'response {response}')
         return response
+
+
+    def correct_typos(self, inrow, response):
+        result = self.correct_sign_swap_typos(inrow, response)
+        if (response['action'] == 'error') and (response['reason'] == f'country-mismatch'):
+            result = self.correct_for_territories(inrow, response)
+        return result
 
 
     def execute(self):
@@ -197,8 +245,6 @@ class GQC:
                         'reverse-geolocate-response', 'note',]
         # Init response
         response = {k: '' for k in responsekeys}
-        response['action'] = 'pass'
-        response['reason'] = 'matching-location'
 
         stringified_row = ''.join(row.values())
         if stringified_row == '':
@@ -260,66 +306,33 @@ class GQC:
 
         latitude = self.canonicalize.latitude(row['latitude'])
         longitude = self.canonicalize.longitude(row['longitude'])
+        coordinate = Coordinate(latitude, longitude)
+        political_division = PoliticalDivision(**{k: row[k] for k in self.config.location_columns() })
+
         try:
-            location = self.reverse_geolocate(Coordinate(latitude, longitude))
-            logging.debug(f'reverse_geolocate({latitude}, {longitude}) => {location}')
+            location = self.reverse_geolocate(coordinate)
+            logging.debug(f'reverse_geolocate({coordinate}) => {location}')
             response['reverse-geolocate-response'] = location
-            response['accession-number'] = int(row['accession-number'])
-            revloc = location.political_division
-            logging.debug(f'revloc {revloc}')
-            for k,v in revloc.as_dict().items():
-                response[f'location-{k}'] = v
-            response['location-latitude'] = self.canonicalize.latitude(location.coordinate.latitude)
-            response['location-longitude'] = self.canonicalize.longitude(location.coordinate.longitude)
-            if response['location-latitude'] and response['location-longitude']:
-                try:
-                    response['location-error-distance'] = (
-                        self.geometry.distance(latitude, 
-                                               longitude, 
-                                               response['location-latitude'], 
-                                               response['location-longitude']))
-                except:
-                    raise
-
-            boundingbox = dict(zip(['latitude-south', 'latitude-north', 'longitude-east', 'longitude-west'], (location.metadata['boundingbox'] if 'boundingbox' in location.metadata else [''] * 4)))
-            response['location-bounding-box'] = boundingbox
-            if (boundingbox['latitude-south'] and
-                boundingbox['latitude-north'] and
-                boundingbox['longitude-east'] and
-                boundingbox['longitude-west']): 
-                response['location-bounding-box-error-distances'] = {
-                    'latitude-north': self.geometry.distance(latitude, 
-                                                             longitude, 
-                                                             self.canonicalize.latitude(boundingbox['latitude-north']), 
-                                                             longitude),
-                    'latitude-south': self.geometry.distance(latitude,
-                                                             longitude, 
-                                                             self.canonicalize.latitude(boundingbox['latitude-south']), 
-                                                             longitude),
-                    'longitude-east': self.geometry.distance(latitude, 
-                                                             longitude, 
-                                                             latitude, 
-                                                             self.canonicalize.longitude(boundingbox['longitude-east'])),
-                    'longitude-west': self.geometry.distance(latitude, 
-                                                             longitude, 
-                                                             latitude, 
-                                                             self.canonicalize.longitude(boundingbox['longitude-west'])),
-                    }
-            imatch = []
-            rmatch = []
-            for k in self.config.location_columns():
-                rk = response[f'location-{k}']
-                imatch.append(row[k])
-                rmatch.append(rk)
-                score = fuzz.token_set_ratio(row[k], rk)
-                logging.debug(f'score ({row[k]}, {rk}) => {score}')
-                if score < self.MIN_FUZZY_SCORE:
+            response['accession-number'] = row['accession-number']
+            if location:
+                self.copy_location_to_response(coordinate, location, response)
+                mismatch = location.political_division.first_different_division(political_division, contract=True)
+                if (mismatch == 'country'):
                     response['action'] = 'error'
-                    response['reason'] = f'{k}-mismatch'
-                    response['note'] = f'input location «{imatch}» ({latitude}, {longitude}) does not match response location ({response["location-latitude"]}, {response["location-longitude"]}) «{rmatch}»'
+                    response['reason'] = f'country-mismatch'
                     response = self.correct_typos(row, response)
-                    break
-
+                elif (mismatch == 'pd1'):
+                    response['action'] = 'error'
+                    response['note'] = f'input location «{political_division}» {tuple(coordinate)} does not match response location ({response["location-latitude"]}, {response["location-longitude"]}) «{political_division}»'
+                    response['reason'] = f'{mismatch}-mismatch'
+                else:
+                    response['action'] = 'pass'
+                    response['reason'] = 'matching-location'
+            else:
+                response['action'] = 'error'
+                response['reason'] = f'incorrect-latitude-longitude'
+                response['note'] = 'reverse locate of {coordinate} failed - either the latitude or longitude or both are seriously wrong'
+                response = self.correct_typos(row, response)
         except urllib.error.HTTPError as exception:
             response['action'] = f'internal-error'
             response['reason'] = f'reverse-geolocate-error'
@@ -334,7 +347,6 @@ class GQC:
             response['action'] = f'internal-error'
             response['reason'] = f'reverse-geolocate-error'
             response['note'] = f'error «{exception}»'
-            
         logging.debug(f'response (row {row} ({latitude}, {longitude})) => {response}')
         return response
 
@@ -342,14 +354,14 @@ class GQC:
         if usecache is None:
             usecache = self.config.value('cache-enabled')
         cachekey=f'latitude:{coordinate.latitude},longitude:{coordinate.longitude}'
-        result = None
+        location = None
         if usecache and self.cache.exists(cachekey):
-            result = Location.from_json(self.cache.get(cachekey))
+            location = Location.from_json(self.cache.get(cachekey))
         elif not self.config.value("cache-only"):
-            result = self.locationiq.reverse_geolocate(coordinate, wait)
-            if result and usecache:
-                self.cache.put(cachekey, result.as_json())
-        return result
+            location = self.locationiq.reverse_geolocate(coordinate, wait)
+            if location and usecache:
+                self.cache.put(cachekey, location.as_json())
+        return location
 
 
 if __name__ == '__main__':
