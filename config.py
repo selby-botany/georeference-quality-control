@@ -28,6 +28,8 @@ class Config:
         if Config.__instance != None:
             raise Exception('This class is a singleton!')
         self.config = Config.default_configuration()
+        from doco import Doco
+        self.doco = Doco()
         inifiles = self.sys_get('inifiles')
         iniconfig = configparser.ConfigParser(default_section=Config.SECTION_GQC)
         iniconfig.read(inifiles)
