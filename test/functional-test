@@ -66,6 +66,15 @@ function test-colombia-coordinate-sign-error-48822() {
 }
 
 
+# Test to make sure --help works
+function test-for--help-option() {
+    text=$(python3 ./gqc.py --help)
+    [[ -n "${text}" ]] || (echo 'Missing --help' && return $s)
+    (echo "${text}" | grep -q -- 'Usage: gqc') || (echo 'Missing usage'; return 1)
+    (echo "${text}" | grep -q -- '-h, --help') || (echo 'Missing --help option text'; return 1)
+}
+
+
 # Simple positive test case
 function test-malawi-pass-23666() {
     # from 2021-04-28/2021-04-28--africa.original.csv
@@ -100,6 +109,15 @@ function test-peru-coordinate-sign-error-32050() {
 }
 
 
+# Tests workaround for special administrative districts
+function test-taiwan-pd1-mismatch-112079() {
+    # from 2021-04-28--asia.original.csv
+    __check "Asia,Eastern Asia,Republic of China Taiwan,T'ai-pei,112079,25.162478,121.52402" \
+            'country:2,pd1:3,accession-number:4,latitude:5,longitude:6' | \
+    grep '«pass,matching-location,'
+}
+
+
 # Tests fuzzy matching of country 'United States' vs. 'United States of America'
 function test-usa-country-mismatch-112841() {
     # from 2021-04-28/2021-04-28--us.original.csv
@@ -108,12 +126,10 @@ function test-usa-country-mismatch-112841() {
 }
 
 
-# Tests workaround for special administrative districts
-function test-taiwan-pd1-mismatch-112079() {
-    # from 2021-04-28--asia.original.csv
-    __check "Asia,Eastern Asia,Republic of China Taiwan,T'ai-pei,112079,25.162478,121.52402" \
-            'country:2,pd1:3,accession-number:4,latitude:5,longitude:6' | \
-    grep '«pass,matching-location,'
+function test-usa-pd1-mismatch-68358() {
+    # from data/2021-04-28/2021-04-28--us.original.csv
+    __check 'United States,Alaska,68358,41.312784,-105.584746' | \
+    grep '«error,pd1-mismatch,'
 }
 
 
