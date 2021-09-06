@@ -2,11 +2,10 @@
 
 from config import Config
 
-
 class Doco:
-    def __init__(self, config):
-        self.config = config
-        
+    def __init__(self, *args, **kwargs):
+        pass
+
     def copyright(self):
         return '''
 Geolocation Quality Control (gqc)
@@ -29,7 +28,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
     def usage(self):
-        defaults = self.config.default_configuration()
+        defaults = Config.instance().default_configuration()
         return f'''
 Usage: gqc [OPTION]...
 
