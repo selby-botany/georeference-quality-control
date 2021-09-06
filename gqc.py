@@ -47,7 +47,6 @@ class GQC:
                             level=getattr(logging, c[Config.SECTION_GQC]['log-level'].upper(), getattr(logging, 'DEBUG')))
 
         self.config = Config.instance(argv)
-        self.doco = Doco(self.config)
 
         try:
             pathlib.Path(os.path.dirname(self.config.value('cache-file'))).mkdir(parents=True, exist_ok=True)
