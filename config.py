@@ -145,6 +145,7 @@ class Config:
         return sorted(result)
 
     def log_on_startup(self):
+        logging.debug(f'sys.path: {sys.path}')
         logging.debug(f'config: {self.config}')
         logging.debug(f'gqc.cache-file: {self.value("cache-file")}')
         logging.debug(f'gqc.cache-enabled: {self.value("cache-enabled")}')
