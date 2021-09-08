@@ -7,6 +7,7 @@ import getopt
 import hashlib
 import logging
 import os
+from pathlib import Path
 import re
 import socket
 import subprocess
@@ -49,7 +50,7 @@ class Config:
         hasher.update(idtext.encode('utf-8'))
         request_id = hasher.hexdigest()
         taskdir = os.path.dirname(os.path.realpath(sys.argv[0]))
-        taskdotdir = os.path.expanduser(f'~/.gqc')
+        taskdotdir = os.path.expanduser(f'{Path.home()}/.gqc')
         result = {
             Config.SECTION_GQC: {
                 'cache-enabled': 'true',    # disabled by '' (empty string)
