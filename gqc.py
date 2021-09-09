@@ -65,7 +65,7 @@ class GQC:
         self.cache = Cache(self.config.value('cache-file'));
         self.cache.load()
 
-        self.canonicalize = Canonicalize(self.config.value('latitude-precision'), self.config.value('longitude-precision'));
+        self.canonicalize = Canonicalize.instance()
         self.geometry = Geometry(self.config.value('latitude-precision'), self.config.value('longitude-precision'))
         self.locationiq = LocationIQ(self.config)
         self.config.log_on_startup()

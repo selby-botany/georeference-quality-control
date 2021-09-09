@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 
+from config import Config
 import logging
 import re
 import unicodedata
 
 
 class Canonicalize:
-    def __init__(self, latitude_precision: int, longitude_precision: int):
-        self.latitude_precision = latitude_precision
-        self.longitude_precision = longitude_precision
+    __instance = None
+
+    def __init__(self):
+        ''' Virtually private constructor. '''
+        if __class__.__instance != None:
+            raise Exception('This class is a singleton!')
+        self.latitude_precision = int(Config.instance().value('latitude-precision'))
+        self.longitude_precision = int(Config.instance().value('longitude-precision'))
 
     def alpha_element(self, element: str) -> str:
         regex = re.compile('[^a-zA-Z]')
@@ -16,6 +22,13 @@ class Canonicalize:
         if e == 'null': e = ''
         logging.debug(f'element «{element}» => «{e}»')
         return e
+
+    @classmethod
+    def instance(cls):
+        if not cls.__instance:
+            cls.__instance = Canonicalize()
+        return cls.__instance
+
 
     def latitude(self, latitude: float) -> float:
         latitude = float(latitude)
