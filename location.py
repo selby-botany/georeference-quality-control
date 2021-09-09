@@ -37,9 +37,9 @@ class Location(NamedTuple):
         result = json.dumps(self.as_dict())
         return result
 
-    def distance(self, location: Location, unit: Unit = Unit.METERS) -> float:
+    def distance(self, location: Location, **kwargs) -> float:
         """ Return the distance between the two locations """
-        return self.coordinate.distance(location.coordinate, unit)
+        return self.coordinate.distance(location.coordinate, **kwargs)
 
     @staticmethod
     def from_json(json_text: str) -> Location:

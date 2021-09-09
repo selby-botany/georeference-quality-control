@@ -65,7 +65,15 @@ class CoordinateTestCase(unittest.TestCase):
 
     def test___str__(self):
         coordinate = Coordinate(12.345678, 90.123456)
-        self.assertEqual(str(coordinate), '{"latitude": 12.345678, "longitude": 90.123456}')
+        self.assertEqual(str(coordinate), '{"latitude": 12.346, "longitude": 90.123}')
+
+    def test_as_json(self):
+        coordinate = Coordinate(12.345678, 90.123456)
+        self.assertEqual(coordinate.as_json(), '{"latitude": 12.346, "longitude": 90.123}')
+
+    def test_canonicalize(self):
+        coordinate = Coordinate(12.345678, 90.123456)
+        self.assertEqual(repr(coordinate.canonicalize()), "Coordinate(latitude=12.346, longitude=90.123)")
 
     def test__distance__one_degree_on_equator(self):
         EPSILON = 0.1  # +/- 1 decimeter
@@ -102,9 +110,6 @@ class CoordinateTestCase(unittest.TestCase):
         c = Coordinate.from_json('{"latitude": 12.345678, "bar": 90.123456}')
         self.assertEqual(c.__class__.__qualname__, 'NoneType')
 
-    def test__as_json(self):
-        coordinate = Coordinate(12.345678, 90.123456)
-        self.assertEqual(coordinate.as_json(), '{"latitude": 12.345678, "longitude": 90.123456}')
 
 
 if __name__ == '__main__':

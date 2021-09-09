@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from __future__ import annotations
+from canonicalize import Canonicalize
 from collections import namedtuple
 from config import Config
 from copy import deepcopy
@@ -58,11 +59,17 @@ class Coordinate(____CoordinateBase):
 
     def as_json(self) -> str:
         """ Return the coordinate as JSON text """
-        return json.dumps(self._asdict(), cls=Coordinate.____CoordinateJsonEncoder)
+        return json.dumps(self.canonicalize()._asdict(), cls=Coordinate.____CoordinateJsonEncoder)
+
+    def canonicalize(self) -> Coordinate:
+        return Coordinate(Canonicalize.latitude(self.latitude), Canonicalize.longitude(self.longitude))
 
     def distance(self, coordinate: Coordinate, unit: Unit = Unit.METERS) -> float:
         """ Return the distance between the two coordinates """
         return haversine((self.latitude, self.longitude), (coordinate.latitude, coordinate.longitude), unit)
+        distance = haversine((float(start_latitude), float(start_longitude)), (float(end_latitude), float(end_longitude)), unit=Unit.KILOMETERS)
+        # FIXME - calculate 3 from first principles
+        return float('{0:.3f}'.format(float(distance)))
 
     @staticmethod
     def from_json(json_text: str) -> Coordinate:

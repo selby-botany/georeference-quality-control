@@ -5,7 +5,6 @@ from canonicalize import Canonicalize
 from config import Config
 from coordinate import Coordinate
 from doco import Doco
-from geometry import Geometry
 from location import Location
 from locationiq import LocationIQ
 from political_division import PoliticalDivision
@@ -65,36 +64,30 @@ class GQC:
         self.cache = Cache(self.config.value('cache-file'));
         self.cache.load()
 
-        self.canonicalize = Canonicalize.instance()
-        self.geometry = Geometry(self.config.value('latitude-precision'), self.config.value('longitude-precision'))
         self.locationiq = LocationIQ(self.config)
         self.config.log_on_startup()
         return
 
-
     def copy_location_to_response(self, coordinate: Coordinate, location: Location, response: Dict[str,Any]):
-        logging.debug(f'coordinate {coordinate} [{type(coordinate)}]')
-        logging.debug(f' location {location} [{type(location)}]')
-        logging.debug(f'response {response} [{type(response)}]')
         location_coordinate = location.coordinate
-        latitude = self.canonicalize.latitude(location_coordinate.latitude)
-        longitude = self.canonicalize.longitude(location_coordinate.longitude)
+        latitude = Canonicalize.latitude(location_coordinate.latitude)
+        longitude = Canonicalize.longitude(location_coordinate.longitude)
         political_division = location.political_division
         for k,v in political_division.as_dict().items():
             response[f'location-{k}'] = v
-        response['location-latitude'] = self.canonicalize.latitude(latitude)
-        response['location-longitude'] = self.canonicalize.longitude(longitude)
+        response['location-latitude'] = Canonicalize.latitude(latitude)
+        response['location-longitude'] = Canonicalize.longitude(longitude)
         response['location-error-distance'] = coordinate.distance(location_coordinate)
         boundingbox = dict(zip(['latitude-south', 'latitude-north', 'longitude-east', 'longitude-west'], (location.metadata['boundingbox'] if 'boundingbox' in location.metadata else [''] * 4)))
         response['location-bounding-box'] = boundingbox
         if (boundingbox['latitude-south'] and boundingbox['latitude-north'] and boundingbox['longitude-east'] and boundingbox['longitude-west']): 
             response['location-bounding-box-error-distances'] = {
-                'latitude-north': self.geometry.distance(latitude, longitude, self.canonicalize.latitude(boundingbox['latitude-north']), longitude),
-                'latitude-south': self.geometry.distance(latitude, longitude, self.canonicalize.latitude(boundingbox['latitude-south']), longitude),
-                'longitude-east': self.geometry.distance(latitude, longitude, latitude, self.canonicalize.longitude(boundingbox['longitude-east'])),
-                'longitude-west': self.geometry.distance(latitude, longitude, latitude, self.canonicalize.longitude(boundingbox['longitude-west'])),
-                }
-        logging.debug(f'location {location} => {response}')
+                'latitude-north': coordinate.distance(Coordinate(boundingbox['latitude-north'], longitude)),
+                'latitude-south': coordinate.distance(Coordinate(boundingbox['latitude-south'], longitude)),
+                'longitude-east': coordinate.distance(Coordinate(latitude, boundingbox['longitude-east'])),
+                'longitude-west': coordinate.distance(Coordinate(latitude, boundingbox['longitude-west'])),
+            }
+        logging.debug(f'coordinate {coordinate}, location {location} => {response}')
 
 
     def correct_for_territories(self, inrow, response):
@@ -103,7 +96,7 @@ class GQC:
         assert 'longitude' in inrow, f'missing "longitude" element'
         logging.debug(f'response {response}')
         # convenience variables
-        coordinate = Coordinate(self.canonicalize.latitude(inrow['latitude']), self.canonicalize.longitude(inrow['longitude']))
+        coordinate = Coordinate(inrow['latitude'], inrow['longitude'])
         # the input political devisions in descending order
         pd = PoliticalDivision(**{c:inrow[c] for c in self.config.location_columns()})
         logging.debug(f'pd {pd}')
@@ -128,7 +121,7 @@ class GQC:
         assert 'longitude' in inrow, f'missing "longitude" element'
         logging.debug(f'response {response}')
         # convenience variables
-        in_coordinate = Coordinate(self.canonicalize.latitude(inrow['latitude']), self.canonicalize.longitude(inrow['longitude']))
+        in_coordinate = Coordinate(inrow['latitude'], inrow['longitude'])
         # the input political devisions in descending order
         in_pd = PoliticalDivision(**{c:inrow[c] for c in self.config.location_columns()})
         # the list of locations tuples to try
@@ -303,8 +296,8 @@ class GQC:
             response['note' ] = '«{row["longitude"]}» must be a floating point (real) number'
             return response
 
-        latitude = self.canonicalize.latitude(row['latitude'])
-        longitude = self.canonicalize.longitude(row['longitude'])
+        latitude = Canonicalize.latitude(row['latitude'])
+        longitude = Canonicalize.longitude(row['longitude'])
         coordinate = Coordinate(latitude, longitude)
         political_division = PoliticalDivision(**{k: row[k] for k in self.config.location_columns() })
 
@@ -322,7 +315,7 @@ class GQC:
                     response = self.correct_typos(row, response)
                 elif (mismatch == 'pd1'):
                     response['action'] = 'error'
-                    response['note'] = f'input location «{political_division}» {tuple(coordinate)} does not match response location ({response["location-latitude"]}, {response["location-longitude"]}) «{political_division}»'
+                    response['note'] = f'input location «{political_division}» {tuple(coordinate)} does not match response location «{location.political_division}» {tuple(location.coordinate)}'
                     response['reason'] = f'{mismatch}-mismatch'
                 else:
                     response['action'] = 'pass'
