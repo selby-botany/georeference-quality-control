@@ -79,6 +79,14 @@ class GQC:
         response['location-longitude'] = Canonicalize.longitude(longitude)
         response['location-error-distance'] = coordinate.distance(location_coordinate)
         boundingbox = dict(zip(['latitude-south', 'latitude-north', 'longitude-east', 'longitude-west'], (location.metadata['boundingbox'] if 'boundingbox' in location.metadata else [''] * 4)))
+        if boundingbox['latitude-south']:
+            boundingbox['latitude-south'] = Canonicalize.latitude(boundingbox['latitude-south'])
+        if boundingbox['latitude-north']:
+            boundingbox['latitude-north'] = Canonicalize.latitude(boundingbox['latitude-north'])
+        if boundingbox['longitude-east']:
+            boundingbox['longitude-east'] = Canonicalize.longitude(boundingbox['longitude-east'])
+        if boundingbox['longitude-west']: 
+            boundingbox['longitude-west'] = Canonicalize.longitude(boundingbox['longitude-west'])
         response['location-bounding-box'] = boundingbox
         if (boundingbox['latitude-south'] and boundingbox['latitude-north'] and boundingbox['longitude-east'] and boundingbox['longitude-west']): 
             response['location-bounding-box-error-distances'] = {
@@ -315,7 +323,7 @@ class GQC:
                     response = self.correct_typos(row, response)
                 elif (mismatch == 'pd1'):
                     response['action'] = 'error'
-                    response['note'] = f'input location «{political_division}» {tuple(coordinate)} does not match response location «{location.political_division}» {tuple(location.coordinate)}'
+                    response['note'] = f'input location «{political_division}» {tuple(coordinate)} does not match response location «{location.political_division}» {tuple(location.coordinate.canonicalize())}'
                     response['reason'] = f'{mismatch}-mismatch'
                 else:
                     response['action'] = 'pass'

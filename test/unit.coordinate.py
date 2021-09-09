@@ -89,6 +89,10 @@ class CoordinateTestCase(unittest.TestCase):
         self.assertTrue(((d01 >= (DISTANCE_00_01 - EPSILON)) and (d01 <= (DISTANCE_00_01 + EPSILON))), f'Distance "0 - 1" «{d01}» is not {DISTANCE_00_01}')
         self.assertEqual(((d10 >= (DISTANCE_01_00 - EPSILON)) and (d10 <= (DISTANCE_01_00 + EPSILON))), 1.0, f'Distance "1 - 0" «{d10}» is not {DISTANCE_01_00}')
         self.assertTrue(((d11 >= -EPSILON) and (d11 <= EPSILON)), f'Identity distance "1 - 1" «{d11}» is not zero')
+        self.assertEqual(d00, 0.0)
+        self.assertEqual(d01, 111195.080)
+        self.assertEqual(d10, 111195.080)
+        self.assertEqual(d11, 0.0)
 
     def test__from_json__valid(self):
         c = Coordinate.from_json('{"latitude": 12.345678, "longitude": 90.123456}')

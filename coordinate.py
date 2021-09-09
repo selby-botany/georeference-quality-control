@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 
 from __future__ import annotations
-from canonicalize import Canonicalize
-from collections import namedtuple
+
 from config import Config
+from canonicalize import Canonicalize
+
+from collections import namedtuple
 from copy import deepcopy
 from haversine import haversine, Unit
 import json
+import logging
 from numbers import Number
+import sys
 from typing import Dict, Union
 
 ____CoordinateBase = namedtuple(typename='____CoordinateBase',
@@ -66,10 +70,10 @@ class Coordinate(____CoordinateBase):
 
     def distance(self, coordinate: Coordinate, unit: Unit = Unit.METERS) -> float:
         """ Return the distance between the two coordinates """
-        return haversine((self.latitude, self.longitude), (coordinate.latitude, coordinate.longitude), unit)
-        distance = haversine((float(start_latitude), float(start_longitude)), (float(end_latitude), float(end_longitude)), unit=Unit.KILOMETERS)
+        distance = haversine((self.latitude, self.longitude), (coordinate.latitude, coordinate.longitude), unit)
         # FIXME - calculate 3 from first principles
-        return float('{0:.3f}'.format(float(distance)))
+        result = float('{0:.3f}'.format(float(distance)))
+        return result
 
     @staticmethod
     def from_json(json_text: str) -> Coordinate:
