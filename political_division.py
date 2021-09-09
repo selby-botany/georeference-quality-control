@@ -27,14 +27,16 @@ class PoliticalDivision(NamedTuple):
             return o.__dict__
 
     class FuzzyCompareResult(NamedTuple):
-        is_equal: bool
-        is_contracted: bool
         this: PoliticalDivision
         other: PoliticalDivision
         inputs: Dict[str,Tuple[str,str]]
         scores: Dict[str, float]
+        max_score: int
+        min_score: int
         matches: Dict[str, bool]
         nmatches: int
+        is_equal: bool
+        is_contracted: bool
 
     def __repr__(self) -> str:
         """ Display the right contraction as the repr form """
@@ -98,11 +100,22 @@ class PoliticalDivision(NamedTuple):
                        str(_other[f]).strip().lower().translate(str.maketrans('', '', string.punctuation))) for f in self._fields }
         equality = { f: (i[0] == i[1]) for (f, i) in inputs.items() }
         scores = { f: fuzz.token_set_ratio(i[0], i[1]) for (f, i) in inputs.items() if i[0] or i[1] }
+        max_score = max(scores.values())
+        min_score = min([s for s in scores.values() if s > 0])
         matches = { f: (equality[f] or (s >= self.MIN_FUZZY_SCORE)) for (f, s) in scores.items() }
         matchvs = list(matches.values())
         nmatches = matchvs.index(0) if matchvs.count(0) > 0 else len(matchvs)
         is_equal = (nmatches > 0)
-        result = PoliticalDivision.FuzzyCompareResult(is_equal, contract, self, other, inputs, scores, matches, nmatches)
+        result = PoliticalDivision.FuzzyCompareResult(this=self,
+                                                      other=other,
+                                                      inputs=inputs,
+                                                      scores=scores,
+                                                      max_score=max_score,
+                                                      min_score=min_score,
+                                                      matches=matches,
+                                                      nmatches=nmatches,
+                                                      is_equal=is_equal,
+                                                      is_contracted=contract)
         return result
 
     def is_equal(self, other: PoliticalDivision, contract: bool = False) -> bool:

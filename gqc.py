@@ -102,7 +102,7 @@ class GQC:
         logging.debug(f'inrow {inrow}')
         assert 'latitude' in inrow, f'missing "latitude" element'
         assert 'longitude' in inrow, f'missing "longitude" element'
-        logging.debug(f'response {response}')
+        logging.debug(f'input response {response}')
         # convenience variables
         coordinate = Coordinate(inrow['latitude'], inrow['longitude'])
         # the input political devisions in descending order
@@ -112,14 +112,17 @@ class GQC:
         location = self.reverse_geolocate(coordinate, usecache=True, wait=False)
         if location:
             shifted_pds = [location.political_division.country] + list(pd)
+            logging.debug(f'shifted_pds {shifted_pds}')
             shifted_pd = PoliticalDivision(**dict(zip(location.political_division._fields, shifted_pds)))
             logging.debug(f'shifted_pd {shifted_pd}')
             comparison = shifted_pd.fuzzy_compare(location.political_division)
-            if comparison.is_equal:
+            logging.debug(f'comparison {comparison}')
+            if comparison.min_score >= PoliticalDivision.MIN_FUZZY_SCORE:
                 response['action'] = f'error'
                 response['reason'] = f'country-is-territory'
                 response['note'] = f'suggestion: change location of {coordinate} from {pd} => {location.political_division}'
                 self.copy_location_to_response(coordinate, Location(coordinate, location.political_division), response)
+        logging.debug(f'returned response {response}')
         return response
 
 
