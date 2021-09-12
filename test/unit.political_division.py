@@ -169,10 +169,10 @@ class PoliticalDivisionTestCase(unittest.TestCase):
         self.assertFalse(comparison.is_contracted)
         self.assertIs(comparison.this, pd1)
         self.assertIs(comparison.other, pd2)
-        self.assertDictEqual(comparison.inputs, {'country': ('united states', 'united states'), 'pd1': ('florida', 'florida'), 'pd2': ('none', 'none'), 'pd3': ('none', 'none'), 'pd4': ('none', 'none'), 'pd5': ('none', 'none')})
-        self.assertDictEqual(comparison.scores, {'country': 100, 'pd1': 100, 'pd2': 100, 'pd3': 100, 'pd4': 100, 'pd5': 100})
-        self.assertDictEqual(comparison.matches, {'country': True, 'pd1': True, 'pd2': True, 'pd3': True, 'pd4': True, 'pd5': True})
-        self.assertEqual(comparison.nmatches, 6)
+        self.assertDictEqual(comparison.inputs, {'country': ('United States', 'United States'), 'pd1': ('Florida', 'Florida'), 'pd2': (None, None), 'pd3': (None, None), 'pd4': (None, None), 'pd5': (None, None)})
+        self.assertDictEqual(comparison.scores, {'country': 100, 'pd1': 100 })
+        self.assertDictEqual(comparison.matches, {'country': True, 'pd1': True })
+        self.assertEqual(comparison.nmatches, 2)
 
     def test_fuzzy_compare_1(self):
         pd1 = PoliticalDivision(country='United States', pd1='Florida')
@@ -182,10 +182,10 @@ class PoliticalDivisionTestCase(unittest.TestCase):
         self.assertFalse(comparison.is_contracted)
         self.assertEqual(comparison.this, pd1)
         self.assertEqual(comparison.other, pd2)
-        self.assertDictEqual(comparison.inputs, {'country': ('united states', 'united states of america'), 'pd1': ('florida', 'banana republic of florida'), 'pd2': ('none', 'none'), 'pd3': ('none', 'none'), 'pd4': ('none', 'none'), 'pd5': ('none', 'none')})
-        self.assertDictEqual(comparison.scores, {'country': 100, 'pd1': 100, 'pd2': 100, 'pd3': 100, 'pd4': 100, 'pd5': 100})
-        self.assertDictEqual(comparison.matches, {'country': True, 'pd1': True, 'pd2': True, 'pd3': True, 'pd4': True, 'pd5': True})
-        self.assertEqual(comparison.nmatches, 6)
+        self.assertDictEqual(comparison.inputs, {'country': ('United States', 'United States of America'), 'pd1': ('Florida', 'Banana Republic of Florida'), 'pd2': (None, None), 'pd3': (None, None), 'pd4': (None, None), 'pd5': (None, None)})
+        self.assertDictEqual(comparison.scores, {'country': 100, 'pd1': 100 })
+        self.assertDictEqual(comparison.matches, {'country': True, 'pd1': True })
+        self.assertEqual(comparison.nmatches, 2)
 
     def test_fuzzy_compare_contracted_1(self):
         pd1 = PoliticalDivision(country='United States', pd1='Florida')
@@ -195,10 +195,10 @@ class PoliticalDivisionTestCase(unittest.TestCase):
         self.assertTrue(comparison.is_contracted)
         self.assertEqual(comparison.this, pd1)
         self.assertEqual(comparison.other, pd2)
-        self.assertDictEqual(comparison.inputs, {'country': ('united states', 'united states of america'), 'pd1': ('florida', 'banana republic of florida'), 'pd2': ('none', 'none'), 'pd3': ('none', 'none'), 'pd4': ('none', 'none'), 'pd5': ('none', 'none')})
-        self.assertDictEqual(comparison.scores, {'country': 100, 'pd1': 100, 'pd2': 100, 'pd3': 100, 'pd4': 100, 'pd5': 100})
-        self.assertDictEqual(comparison.matches, {'country': True, 'pd1': True, 'pd2': True, 'pd3': True, 'pd4': True, 'pd5': True})
-        self.assertEqual(comparison.nmatches, 6)
+        self.assertDictEqual(comparison.inputs, {'country': ('United States', 'United States of America'), 'pd1': ('Florida', 'Banana Republic of Florida'), 'pd2': (None, None), 'pd3': (None, None), 'pd4': (None, None), 'pd5': (None, None)})
+        self.assertDictEqual(comparison.scores, {'country': 100, 'pd1': 100 })
+        self.assertDictEqual(comparison.matches, {'country': True, 'pd1': True })
+        self.assertEqual(comparison.nmatches, 2)
 
     def test_get(self):
         data = {'country': 'Mexico', 'pd1': 'Cabo', 'pd3': 'city', 'pd2': 'county' }

@@ -9,10 +9,7 @@ import string
 from typing import Dict, NamedTuple, Union
 
 
-class PoliticalDivision(NamedTuple):
-    '''A political division as a list of progressively
-    finer political divisions beginning with the country'''
-    POLITICAL_DIVISIONS = ['country', 'pd1', 'pd2', 'pd3', 'pd4', 'pd5']
+class __PoliticalDivisionBase(NamedTuple):
     country: Union[str, None] = None
     pd1: Union[str, None] = None
     pd2: Union[str, None] = None
@@ -20,6 +17,10 @@ class PoliticalDivision(NamedTuple):
     pd4: Union[str, None] = None
     pd5: Union[str, None] = None
 
+class PoliticalDivision(__PoliticalDivisionBase):
+    '''A political division as a list of progressively
+    finer political divisions beginning with the country'''
+    POLITICAL_DIVISIONS = ['country', 'pd1', 'pd2', 'pd3', 'pd4', 'pd5']
     MIN_FUZZY_SCORE = 85
 
     class ____JsonEncoder(json.JSONEncoder):
@@ -37,6 +38,14 @@ class PoliticalDivision(NamedTuple):
         nmatches: int
         is_equal: bool
         is_contracted: bool
+
+    @staticmethod
+    def __new__(cls, *args, **kwargs) -> PoliticalDivision:
+        def _clean(v): return v if v is None else str(v).strip().translate(str.maketrans('', '', string.punctuation))
+        newargs = [ _clean(v) for v in args ]
+        newkwargs = { k: None for k in PoliticalDivision.POLITICAL_DIVISIONS } | { k: _clean(v) for (k, v) in kwargs.items() }
+        result = super().__new__(cls, *newargs, **newkwargs)
+        return result
 
     def __repr__(self) -> str:
         """ Display the right contraction as the repr form """
@@ -96,12 +105,12 @@ class PoliticalDivision(NamedTuple):
             _self = self.contract()
         _self = { **_empty, **_self}
         _other = { **_empty, **_other}
-        inputs = { f: (str(_self[f]).strip().lower().translate(str.maketrans('', '', string.punctuation)),
-                       str(_other[f]).strip().lower().translate(str.maketrans('', '', string.punctuation))) for f in self._fields }
-        equality = { f: (i[0] == i[1]) for (f, i) in inputs.items() }
-        scores = { f: fuzz.token_set_ratio(i[0], i[1]) for (f, i) in inputs.items() if i[0] or i[1] }
-        max_score = max(scores.values())
-        min_score = min([s for s in scores.values() if s > 0])
+        inputs = { f: (v, _other[f]) for (f, v) in _self.items() }
+        equality = { f: (v[0] == v[1]) for (f, v) in inputs.items() }
+        scores = { f: fuzz.token_set_ratio(v[0], v[1]) for (f, v) in inputs.items() if v[0] or v[1] }
+        max_score = max(scores.values()) if scores else 0
+        min_score = min([s for s in scores.values() if s > 0]) if scores else None
+        # raise AssertionError(f'inputs {inputs} equality {equality} scores {scores} scores.values() {scores.values()} max_score {max_score} min_score {min_score}')
         matches = { f: (equality[f] or (s >= self.MIN_FUZZY_SCORE)) for (f, s) in scores.items() }
         matchvs = list(matches.values())
         nmatches = matchvs.index(0) if matchvs.count(0) > 0 else len(matchvs)
