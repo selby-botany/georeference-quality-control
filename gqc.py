@@ -108,20 +108,21 @@ class GQC:
         # the input political devisions in descending order
         pd = PoliticalDivision(**{c:inrow[c] for c in self.config.location_columns()})
         logging.debug(f'pd {pd}')
-
-        location = self.reverse_geolocate(coordinate, usecache=True, wait=False)
-        if location:
-            shifted_pds = [location.political_division.country] + list(pd)
-            logging.debug(f'shifted_pds {shifted_pds}')
-            shifted_pd = PoliticalDivision(**dict(zip(location.political_division._fields, shifted_pds)))
-            logging.debug(f'shifted_pd {shifted_pd}')
-            comparison = shifted_pd.fuzzy_compare(location.political_division)
-            logging.debug(f'comparison {comparison}')
-            if comparison.min_score >= PoliticalDivision.MIN_FUZZY_SCORE:
-                response['action'] = f'error'
-                response['reason'] = f'country-is-territory'
-                response['note'] = f'suggestion: change location of {coordinate} from {pd} => {location.political_division}'
-                self.copy_location_to_response(coordinate, Location(coordinate, location.political_division), response)
+        reverse_location = self.reverse_geolocate(coordinate, usecache=True, wait=False)
+        if reverse_location:
+            reverse_pd = reverse_location.political_division
+            if not self._fuzzy_compare_equal(pd.country, reverse_pd.country):
+                response['action'] = 'error'
+                response['reason'] = f'country-mismatch'
+                response['note'] = f'input location «{pd}» {tuple(coordinate)} does not match response location «{reverse_pd}» {tuple(reverse_location.coordinate.canonicalize())}'
+                if self._fuzzy_compare_equal(pd.pd1, reverse_pd.country):
+                    response['reason'] = f'pd1-is-reverse-country'
+                    response['note'] = f'suggestion: change location of {coordinate} from {pd} => {reverse_pd}'
+                    self.copy_location_to_response(coordinate, Location(coordinate, reverse_pd), response)
+                if self._fuzzy_compare_equal(pd.country, reverse_pd.pd1):
+                    response['reason'] = f'country-is-reverse-pd1'
+                    response['note'] = f'suggestion: change location of {coordinate} from {pd} => {reverse_pd}'
+                    self.copy_location_to_response(coordinate, Location(coordinate, reverse_pd), response)
         logging.debug(f'returned response {response}')
         return response
 
@@ -365,6 +366,15 @@ class GQC:
             if location and usecache:
                 self.cache.put(cachekey, location.as_json())
         return location
+
+    def _fuzzy_compare_score(self, a: str, b: str) -> int:
+        return fuzz.token_set_ratio(a, b) if (a and b) else 0
+        result = 0
+        if (a and b):
+            result = fuzz.token_set_ratio(a, b)
+        return result
+    def _fuzzy_compare_equal(self, a: str, b: str) -> int:
+        return (self._fuzzy_compare_score(a, b) >= self.MIN_FUZZY_SCORE)
 
 
 if __name__ == '__main__':

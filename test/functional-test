@@ -89,7 +89,7 @@ function test-new-caledonia-country-mismatch-409() {
     # from 2021-04-28/2021-04-28--africa.original.csv
     __check 'Oceania,Melanesia,New Caledonia,South,409,-21.69857,165.984831' \
             'country:2,pd1:3,accession-number:4,latitude:5,longitude:6' | \
-    grep '«error,country-is-territory,'
+    grep '«error,country-is-reverse-pd1,'
 }
 
 # FIXME: Tests an (currently) unrecoverable error -- same number erroneously c&p into lat and long
