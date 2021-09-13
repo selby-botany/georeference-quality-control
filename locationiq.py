@@ -24,9 +24,9 @@ class LocationIQ:
         type(self).KEYMAP = dict(zip(LocationIQ.ADDRESS_KEYS, PoliticalDivision.POLITICAL_DIVISIONS))
         self.backoff_decay_factor = float(config.sys_get('backoff-decay-factor', Config.SECTION_LOCATIONIQ))
         assert self.backoff_decay_factor > 0.0, f'backoff-decay-factor must be greater than zero: current value is {self.backoff_decay_factor}'
-        self.backoff_seconds = float(config.sys_get('backoff-min-seconds', Config.SECTION_LOCATIONIQ))
-        assert self.backoff_seconds > 0.0, f'backoff-min-seconds must be greater than zero: current value is {self.backoff_seconds}'
-        self.backoff_min_seconds = self.backoff_seconds
+        self.backoff_min_seconds = float(config.sys_get('backoff-min-seconds', Config.SECTION_LOCATIONIQ))
+        assert self.backoff_min_seconds > 0.0, f'backoff-min-seconds must be greater than zero: current value is {self.backoff_min_seconds}'
+        self.backoff_seconds = self.backoff_min_seconds
         self.backoff_growth_factor = float(config.sys_get('backoff-growth-factor', Config.SECTION_LOCATIONIQ))
         assert self.backoff_growth_factor > 0.0, f'backoff-growth-factor must be greater than zero: current value is {self.backoff_growth_factor}'
         self.backoff_learning_factor = float(config.sys_get('backoff-learning-factor', Config.SECTION_LOCATIONIQ))
@@ -110,7 +110,7 @@ class LocationIQ:
         Each spurned request causes the backoff time is increased by:::
 
             backoff = backoff + ((backoff + sleep-secods) * backoff-learning-factor
-            backoff = max(min(backoff, backoff-min-seconds), backoff-max-seconds)
+            backoff = min(max(backoff, backoff-min-seconds), backoff-max-seconds)
 
         When a request is successful the backoff time is reduced by a factor of
         `backoff-decay-factor`:::
@@ -131,7 +131,7 @@ class LocationIQ:
                 logging.debug(f'url={url} result={result}')
                 break
             except urllib.error.HTTPError as exception:
-                logging.debug(f'url={url} result={result} exception={exception} code={exception.code} reason ={exception.reason} headers={exception.headers}')
+                logging.debug(f'url={url} result={result} exception {exception} code {exception.code} reason {exception.reason}')
                 if exception.code == http.HTTPStatus.TOO_MANY_REQUESTS:
                     logging.debug(f'TOO_MANY_REQUESTS! {url}: wait {sleep_seconds} seconds to let the server cool down')
                     time.sleep(sleep_seconds)
@@ -144,7 +144,7 @@ class LocationIQ:
         if not self.backoff_seconds == sleep_seconds:
             logging.debug(f'sleep_seconds={sleep_seconds}, self.backoff_seconds={self.backoff_seconds}, self.backoff_learning_factor={self.backoff_learning_factor}')
             new_backoff = self.backoff_seconds + ((self.backoff_seconds + sleep_seconds) * self.backoff_learning_factor)
-            new_backoff_seconds = max(min(new_backoff, self.backoff_min_seconds), self.backoff_max_seconds)
+            new_backoff_seconds = min(max(new_backoff, self.backoff_min_seconds), self.backoff_max_seconds)
             if not self.backoff_seconds == new_backoff_seconds:
                 logging.debug(f'modify backoff time from {self.backoff_seconds} seconds to {new_backoff_seconds} seconds')
                 self.backoff_seconds = new_backoff_seconds
