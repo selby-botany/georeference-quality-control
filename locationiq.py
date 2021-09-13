@@ -133,8 +133,7 @@ class LocationIQ:
             except urllib.error.HTTPError as exception:
                 logging.debug(f'url={url} result={result} exception={exception} code={exception.code} reason ={exception.reason} headers={exception.headers}')
                 if exception.code == http.HTTPStatus.TOO_MANY_REQUESTS:
-                    logging.debug(f'TOO_MANY_REQUESTS! url={url} result={result} headers={exception.headers}')
-                    logging.debug(f'TOO_MANY_REQUESTS! wait {sleep_seconds} seconds to let the server cool down')
+                    logging.debug(f'TOO_MANY_REQUESTS! {url}: wait {sleep_seconds} seconds to let the server cool down')
                     time.sleep(sleep_seconds)
                     sleep_seconds *= self.backoff_growth_factor
                     logging.debug(f'new-sleep-seconds-after-backoff={sleep_seconds}')
@@ -152,7 +151,7 @@ class LocationIQ:
         else:
             self.backoff_seconds *= (1 - self.backoff_decay_factor)
         if rate_limit:
-            logging.debug(f'rate limited -- sleeping {self.backoff_seconds} seconds')
+            logging.debug(f'meditating for {self.backoff_seconds} seconds')
             time.sleep(self.backoff_seconds)
         return result
 
