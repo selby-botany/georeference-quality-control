@@ -108,8 +108,10 @@ class PoliticalDivision(__PoliticalDivisionBase):
         inputs = { f: (v, _other[f]) for (f, v) in _self.items() }
         equality = { f: (v[0] == v[1]) for (f, v) in inputs.items() }
         scores = { f: fuzz.token_set_ratio(v[0], v[1]) for (f, v) in inputs.items() if v[0] or v[1] }
-        max_score = max(scores.values()) if scores else 0
-        min_score = min([s for s in scores.values() if s > 0]) if scores else None
+        values = scores.values()
+        max_score = max(values) if values else 0
+        non_zero_values = [v for v in values if v > 0]
+        min_score = min(non_zero_values) if non_zero_values else 0
         # raise AssertionError(f'inputs {inputs} equality {equality} scores {scores} scores.values() {scores.values()} max_score {max_score} min_score {min_score}')
         matches = { f: (equality[f] or (s >= self.MIN_FUZZY_SCORE)) for (f, s) in scores.items() }
         matchvs = list(matches.values())
