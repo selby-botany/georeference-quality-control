@@ -22,61 +22,108 @@ class LocationIQ:
 
     def __init__(self, config: Config) -> None:
         type(self).KEYMAP = dict(zip(LocationIQ.ADDRESS_KEYS, PoliticalDivision.POLITICAL_DIVISIONS))
-        self.__backoff_initial_seconds = float(config.sys_get('backoff-initial-seconds'));
-        self.__backoff_growth_factor = float(config.sys_get('backoff-growth-factor'))
-        self.__backoff_learning_factor = float(config.sys_get('backoff-learning-factor'))
-        self.__host = config.get('api-host', Config.SECTION_LOCATIONIQ)
-        self.__token = config.get('api-token', Config.SECTION_LOCATIONIQ)
-        self.__reverse_url_format = config.get('reverse-url-format', section=Config.SECTION_LOCATIONIQ)
-        if not self.__host:
+        self.backoff_decay_factor = float(config.sys_get('backoff-decay-factor', Config.SECTION_LOCATIONIQ))
+        assert self.backoff_decay_factor > 0.0, f'backoff-decay-factor must be greater than zero: current value is {self.backoff_decay_factor}'
+        self.backoff_seconds = float(config.sys_get('backoff-min-seconds', Config.SECTION_LOCATIONIQ))
+        assert self.backoff_seconds > 0.0, f'backoff-min-seconds must be greater than zero: current value is {self.backoff_seconds}'
+        self.backoff_min_seconds = self.backoff_seconds
+        self.backoff_growth_factor = float(config.sys_get('backoff-growth-factor', Config.SECTION_LOCATIONIQ))
+        assert self.backoff_growth_factor > 0.0, f'backoff-growth-factor must be greater than zero: current value is {self.backoff_growth_factor}'
+        self.backoff_learning_factor = float(config.sys_get('backoff-learning-factor', Config.SECTION_LOCATIONIQ))
+        assert self.backoff_learning_factor > 0.0, f'backoff-learning-factor must be greater than zero: current value is {self.backoff_learning_factor}'
+        self.backoff_max_seconds = float(config.sys_get('backoff-max-seconds', Config.SECTION_LOCATIONIQ))
+        assert self.backoff_max_seconds > 0.0, f'backoff-max-seconds must be greater than zero: current value is {self.backoff_max_seconds}'
+        self.host = config.get('api-host', Config.SECTION_LOCATIONIQ)
+        self.token = config.get('api-token', Config.SECTION_LOCATIONIQ)
+        self.reverse_url_format = config.get('reverse-url-format', section=Config.SECTION_LOCATIONIQ)
+        if not self.host:
             raise ValueError('api-host is not set')
-        if not self.__token:
+        if not self.token:
             raise ValueError('api-token is not set')
-        if not self.__reverse_url_format:
+        if not self.reverse_url_format:
             raise ValueError('reverse-url-format is not set')
 
-    def reverse_geolocate(self, coordinate: Coordinate, wait=True) -> Location:
+    def reverse_geolocate(self, coordinate: Coordinate, rate_limit=True) -> Location:
         result = None
         latitude = coordinate.latitude
         longitude = coordinate.longitude
-        url = self.__reverse_geolocate_url(latitude, longitude)
-        logging.debug(f'request lat={latitude} long={longitude} url={url}')
+        url = self.reverse_geolocate_url(coordinate)
+        logging.debug(f'request {coordinate} => url {url}')
         # FIXME: Break this down and do error checking
-        reverse = self.__reverse_geolocate_fetch(url, wait)
-        logging.debug(f'response lat={latitude} long={longitude} result={reverse}')
+        reverse = self.reverse_geolocate_fetch(url, rate_limit)
+        logging.debug(f'response {coordinate} result={reverse}')
         if reverse:
             reverse = json.loads(reverse)
             if 'error' in reverse:
                 raise RuntimeError(json.dumps(reverse))
             if (('lat' in reverse) and ('lon' in reverse) and ('address' in reverse)):
                 c = Coordinate(reverse['lat'], reverse['lon'])
-                pd = PoliticalDivision(**self.__extract_political_division(reverse))
+                pd = self.extract_political_division(reverse)
                 meta = {}
-                if ('distance' in reverse):
-                    meta['distance'] = reverse['distance']
-                if ('boundingbox' in reverse):
-                    meta['boundingbox'] = copy.deepcopy(reverse['boundingbox'])
                 meta['__request_position'] = coordinate
                 meta['__request_url'] = url
                 meta['__response'] = reverse
+                if ('boundingbox' in reverse):
+                    meta['boundingbox'] = copy.deepcopy(reverse['boundingbox'])
+                if ('distance' in reverse):
+                    meta['distance'] = reverse['distance']
                 result = Location(coordinate=c, political_division=pd, metadata=meta)
-        logging.debug(f'response lat={latitude} long={longitude} result={result}')
+        logging.debug(f'result {result}')
         return result
 
-    def __reverse_geolocate_url(self, latitude, longitude):
-        return self.__reverse_url_format.format(host=self.__host, token=self.__token, latitude=latitude, longitude=longitude)
+    def reverse_geolocate_url(self, coordinate: Coordinate) -> str:
+        """
+        Returns the URL to reverse locate the given coordinate
+        """
+        return self.reverse_url_format.format(host=self.host, token=self.token, latitude=coordinate.latitude, longitude=coordinate.longitude)
 
-    def __extract_political_division(self, response):
-        # LocationIQ response 'address' fields to PDx indexed fields
-        return {l:response['address'][k] if (('address' in response) and (k in response['address'])) else '' for k,l in LocationIQ.KEYMAP.items()}
+    def extract_political_division(self, reverse_response) -> PoliticalDivision:
+        """
+        LocationIQ response `address` fields converted to a PoliticalDivision
+        """
+        pds = { l: reverse_response['address'][k] if (('address' in reverse_response) and (k in reverse_response['address'])) else '' for (k,l) in LocationIQ.KEYMAP.items()}
+        logging.debug(f'pds {pds}]')
+        result = PoliticalDivision(**pds)
+        logging.debug(f'result {result}')
+        return result
 
-    def __reverse_geolocate_fetch(self, url, wait=True):
+    def reverse_geolocate_fetch(self, url: str, rate_limit: bool = True):
+        """
+        Returns the response to evaluating the URL
+
+        `rate_limit` equal to `True` will sleep after every request by the
+        *backoff seconds* (see below)
+
+        If the HTTP response is TOO_MANY_REQUESTS then the method will wait
+        *backoff seconds* (see below)
+
+        Three configuration parameters control the number of *backoff seconds*:
+            *    `backoff-decay-factor`
+            *    `backoff-growth-factor`
+            *    `backoff-learning-factor`
+            *    `backoff-max-seconds`
+            *    `backoff-min-seconds`
+
+        Each time a **`TOO_MANY_REQUESTS`** response occurs the method sleeps
+        *backoff seconds* amount of time before retrying the request. The
+        number of seconds to sleep is initially `backoff-min-seconds`.
+        Each spurned request causes the backoff time is increased by:::
+
+            backoff = backoff + ((backoff + sleep-secods) * backoff-learning-factor
+            backoff = max(min(backoff, backoff-min-seconds), backoff-max-seconds)
+
+        When a request is successful the backoff time is reduced by a factor of
+        `backoff-decay-factor`:::
+
+            backoff = backoff * (1 - backoff-decay-factor)
+
+        The new backoff time will be used on the next **`TOO_MANY_REQUESTS`** response.
+        Additionally, the new backoff time will be used when `rate_limit` is `True`.
+        Each completed request is followed by sleeping backoff seconds.
+        """
         ssl._create_default_https_context = ssl._create_unverified_context
         result = '{}'
-        _adjust_backoff = False
-        sleep_seconds = self.__backoff_initial_seconds
-        logging.debug(f'sleep_seconds={sleep_seconds}')
-
+        sleep_seconds = self.backoff_seconds
         while True:
             try:
                 logging.debug(f'urlopen «{url}»')
@@ -89,20 +136,23 @@ class LocationIQ:
                     logging.debug(f'TOO_MANY_REQUESTS! url={url} result={result} headers={exception.headers}')
                     logging.debug(f'TOO_MANY_REQUESTS! wait {sleep_seconds} seconds to let the server cool down')
                     time.sleep(sleep_seconds)
-                    sleep_seconds *= self.__backoff_growth_factor
+                    sleep_seconds *= self.backoff_growth_factor
                     logging.debug(f'new-sleep-seconds-after-backoff={sleep_seconds}')
                 elif exception.code == http.HTTPStatus.NOT_FOUND:
                     return '{}'
                 else:
                     raise
-        if not self.__backoff_initial_seconds == sleep_seconds:
-            logging.debug(f'sleep_seconds={sleep_seconds}, self.__backoff_initial_seconds={self.__backoff_initial_seconds}, self.__backoff_learning_factor={self.__backoff_learning_factor}')
-            new_backoff_initial_seconds = self.__backoff_initial_seconds + ((self.__backoff_initial_seconds + sleep_seconds) * self.__backoff_learning_factor)
-            if not self.__backoff_initial_seconds == new_backoff_initial_seconds:
-                logging.debug(f'increase backoff-initial-seconds from {self.__backoff_initial_seconds} to {new_backoff_initial_seconds}')
-                self.__backoff_initial_seconds = new_backoff_initial_seconds
-        if wait:
-            logging.debug(f'rate limit -- wait {self.__backoff_initial_seconds} seconds')
-            time.sleep(self.__backoff_initial_seconds)
+        if not self.backoff_seconds == sleep_seconds:
+            logging.debug(f'sleep_seconds={sleep_seconds}, self.backoff_seconds={self.backoff_seconds}, self.backoff_learning_factor={self.backoff_learning_factor}')
+            new_backoff = self.backoff_seconds + ((self.backoff_seconds + sleep_seconds) * self.backoff_learning_factor)
+            new_backoff_seconds = max(min(new_backoff, self.backoff_min_seconds), self.backoff_max_seconds)
+            if not self.backoff_seconds == new_backoff_seconds:
+                logging.debug(f'modify backoff time from {self.backoff_seconds} seconds to {new_backoff_seconds} seconds')
+                self.backoff_seconds = new_backoff_seconds
+        else:
+            self.backoff_seconds *= (1 - self.backoff_decay_factor)
+        if rate_limit:
+            logging.debug(f'rate limited -- sleeping {self.backoff_seconds} seconds')
+            time.sleep(self.backoff_seconds)
         return result
 
