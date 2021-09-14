@@ -69,6 +69,7 @@ execute() {
                     ); do
         inputfile="${DATA}/${DATE}--${country}.input.csv"
         resultsfile="${DATA}/${DATE}--${country}.results.csv"
+        cachefile="~/.gqc/gqc.reverse-lookup.${country}.cache"
         for datafile in $(find "data" -type f -name '*'${country}'.results.csv' | \
                           grep -v "${DATE}--" | \
                           sort | \
@@ -80,7 +81,7 @@ execute() {
             else
                 columnMap=$(column-map "${header}")
                 fields=$(field-cut-selector "${header}")
-                echo "cat '${datafile}' | grep -v ',pass,matching-country-and-pd1,' | python ./csvcut.py -f${fields} | tee '${inputfile}' | python ./gqc.py > '${resultsfile}'"
+                echo "cat '${datafile}' | grep -v ',pass,matching-country-and-pd1,' | python ./csvcut.py -f${fields} | tee '${inputfile}' | python ./gqc.py --cache-file "${cachefile}" > '${resultsfile}'"
             fi
         done
     done
