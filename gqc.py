@@ -208,7 +208,7 @@ class GQC:
                         # header row
                         append = list(newkeys)
                     else:
-                        row = {k: str(rawrow[columns[k]]).strip() for k in inputkeys}
+                        row = { k: str(r).strip() for (k,r) in { k: rawrow[c:c+1][0] if bool(rawrow[c:c+1]) else '' for (k, c) in columns.items() }.items() }
                         logging.debug(f'row[{row_number}]: {json.dumps(row)}')
                         result = self.process_row(row)
                         logging.debug(f'process-row-result[{row_number}] {json.dumps(result)}')
@@ -261,51 +261,51 @@ class GQC:
             return response
 
         if row['accession-number'] == '':
-            response['action'] = 'ignore'
-            response['reason'] = f'no-accession-number'
+            response['action'] = 'error'
+            response['reason'] = 'no-accession-number'
         if not row['accession-number'].isdecimal():
-            response['action'] = 'ignore'
-            response['reason'] = f'accession-number-not-integer'
-            response['note' ] = '«{row["accession-number"]}» should be a decimal integer'
+            response['action'] = 'error'
+            response['reason'] = 'accession-number-not-integer'
+            response['note' ] = f'«accession-number {row["accession-number"]}» should be a decimal integer'
             return response
 
         if not (row['latitude'] or row['longitude']):
-            response['action'] = 'ignore'
-            response['reason'] = f'no-latitude-longitude'
+            response['action'] = 'error'
+            response['reason'] = 'no-latitude-or-longitude'
             return response
 
         if not row['latitude']:
-            response['action'] = 'ignore'
-            response['reason'] = f'no-latitude'
+            response['action'] = 'error'
+            response['reason'] = 'no-latitude'
             return response
         try:
             latitude = float(row['latitude'])
             if latitude < -90.0 or latitude > 90.0:
                 response['action'] = 'error'
-                response['reason'] = f'latitude-range-error'
-                response['note' ] = '«{row["latitude"]}» cannot not be less than -90 or greater then +90'
+                response['reason'] = 'latitude-range-error'
+                response['note' ] = f'latitude «{row["latitude"]}» cannot not be less than -90 or greater then +90'
                 return response
         except ValueError:
-            response['action'] = 'ignore'
-            response['reason'] = f'latitude-number-not-decimal-float'
-            response['note' ] = '«{row["latitude"]}» must be a floating point (real) number'
+            response['action'] = 'error'
+            response['reason'] = 'latitude-number-not-decimal-float'
+            response['note' ] = f'latitude «{row["latitude"]}» must be a floating point (real) number'
             return response
 
         if not row['longitude']:
-            response['action'] = 'ignore'
-            response['reason'] = f'no-longitude'
+            response['action'] = 'error'
+            response['reason'] = 'no-longitude'
             return response
         try:
             longitude = float(row['longitude'])
             if longitude < -360.0 or longitude > 360.0:
                 response['action'] = 'error'
-                response['reason'] = f'longitude-range-error'
-                response['note' ] = '«{row["longitude"]}» cannot not be less than -360 or greater then +360'
+                response['reason'] = 'longitude-range-error'
+                response['note' ] = f'longitude «{row["longitude"]}» cannot not be less than -360 or greater then +360'
                 return response
         except ValueError:
-            response['action'] = 'ignore'
-            response['reason'] = f'longitude-number-not-decimal-float'
-            response['note' ] = '«{row["longitude"]}» must be a floating point (real) number'
+            response['action'] = 'error'
+            response['reason'] = 'longitude-number-not-decimal-float'
+            response['note' ] = f'longitude «{row["longitude"]}» must be a floating point (real) number'
             return response
 
         latitude = Canonicalize.latitude(row['latitude'])
@@ -323,12 +323,13 @@ class GQC:
                 mismatch = location.political_division.first_different_division(political_division, contract=True)
                 if (mismatch == 'country'):
                     response['action'] = 'error'
-                    response['reason'] = f'country-mismatch'
+                    response['reason'] = f'{mismatch}-mismatch'
+                    response['note'] = f'input location «{political_division}» {tuple(coordinate)} does not match response location «{location.political_division}» {tuple(location.coordinate.canonicalize())}'
                     response = self.correct_typos(row, response)
                 elif (mismatch == 'pd1'):
                     response['action'] = 'error'
-                    response['note'] = f'input location «{political_division}» {tuple(coordinate)} does not match response location «{location.political_division}» {tuple(location.coordinate.canonicalize())}'
                     response['reason'] = f'{mismatch}-mismatch'
+                    response['note'] = f'input location «{political_division}» {tuple(coordinate)} does not match response location «{location.political_division}» {tuple(location.coordinate.canonicalize())}'
                 else:
                     response['action'] = 'pass'
                     response['reason'] = 'matching-location'
