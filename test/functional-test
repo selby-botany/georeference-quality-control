@@ -32,6 +32,13 @@ function test-asia-pd1-mismatch-55720() {
 }
 
 
+function test-bolivia-index-error-34493() {
+    # from 2021-04-28/2021-04-28--bolivia.original.csv
+    __check 'Bolivia,La Paz,34493,"-16.4684219,-67.769785,10",-68.073282' | \
+    grep '[«,]error,latitude-number-not-decimal-float,'
+}
+
+
 # Simple positive test case
 function test-bolivia-pass-47568() {
     # from 2021-04-28/2021-04-28--bolivia.original.csv
