@@ -95,10 +95,10 @@ class Config:
             },
             Config.SECTION_SYSTEM: {
                 'argv': sys.argv,
-                'backoff-decay-factor': 0.05,
+                'backoff-decay-factor': 0.1,
                 'backoff-growth-factor': 1.1,
                 'backoff-learning-factor': 0.2,
-                'backoff-max-seconds': 20,
+                'backoff-max-seconds': 30,
                 'backoff-min-seconds': 1,
                 'command': subprocess.list2cmdline([sys.executable] + sys.argv),
                 'inifiles': [
