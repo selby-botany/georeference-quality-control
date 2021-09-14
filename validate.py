@@ -21,7 +21,7 @@ class Validate:
 
     @staticmethod
     def file_readable(filename: str) -> bool:
-        if os.path.exists(filename) and os.path.isfile(filename):
+        if os.path.exists(filename) and not os.path.isdir(filename):
             return os.access(filename, os.R_OK)
         return False
 
@@ -30,7 +30,7 @@ class Validate:
     def file_writable(filename: str) -> bool:
         if os.path.exists(filename):
             # path exists
-            if os.path.isfile(filename): # is it a file or a dir?
+            if not os.path.isdir(filename): # is it a file or a dir?
                 # also works when file is a link and the target is writable
                 return os.access(filename, os.W_OK)
             else:
