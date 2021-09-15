@@ -81,7 +81,7 @@ execute() {
             else
                 columnMap=$(column-map "${header}")
                 fields=$(field-cut-selector "${header}")
-                echo "cat '${datafile}' | grep -v ',pass,matching-country-and-pd1,' | python ./csvcut.py -f${fields} | tee '${inputfile}' | python ./gqc.py --cache-file "${cachefile}" > '${resultsfile}'"
+                echo "cat '${datafile}' | grep -v ',pass,matching-country-and-pd1,' | python ./csvcut.py -f${fields} | tee '${inputfile}' | python ./gqc.py --cache-file "${cachefile}" > '${resultsfile}' &"
             fi
         done
     done
