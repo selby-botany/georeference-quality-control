@@ -336,7 +336,7 @@ class GQC:
             else:
                 response['action'] = 'error'
                 response['reason'] = f'incorrect-latitude-longitude'
-                response['note'] = 'reverse locate of {coordinate} failed - either the latitude or longitude or both are seriously wrong'
+                response['note'] = f'reverse locate of {coordinate} failed - either the latitude or longitude or both are seriously wrong'
                 response = self.correct_typos(row, response)
         except urllib.error.HTTPError as exception:
             response['action'] = f'internal-error'
