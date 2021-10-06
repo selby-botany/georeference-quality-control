@@ -10,10 +10,12 @@ import os
 
 class Cache(MutableMapping):
     ''' Simple Dict backed cache that can be persisted '''
-    def __init__(self, filepath: str):
+    def __init__(self, filepath: str, load: bool = True):
         assert filepath, f'Missing filepath'
         self.filepath = filepath
         self.__cache = {}
+        if load:
+            self.load()
 
     def __contains__(self, key: str) -> bool:
         assert key, f'Missing key'
