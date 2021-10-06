@@ -15,7 +15,7 @@ class Cache(MutableMapping):
         self.filepath = filepath
         self.__cache = {}
         if load:
-            self.load()
+            self._load()
 
     def __contains__(self, key: str) -> bool:
         assert key, f'Missing key'
@@ -39,23 +39,12 @@ class Cache(MutableMapping):
         assert key, f'Missing key'
         assert value, f'Missing value'
         self.__cache[key] = value
-
-    def dump(self) -> None:
         with open(self.filepath, 'w+') as cachefile:
             json.dump(self.__cache, cachefile)
 
-    def exists(self, key: str) -> bool:
-        return key in self.__cache
-
-    def get(self, key: str) -> str:
-        return self[key] if key in self else None
-
-    def load(self) -> None:
+    def _load(self) -> None:
         cache = {}
         if os.path.exists(self.filepath) and os.path.isfile(self.filepath) and os.access(self.filepath, os.R_OK) and (os.path.getsize(self.filepath) >= len('''{}''')):
             with open(self.filepath, 'r') as filehandle:
                 cache = json.loads(filehandle.read())
         self.__cache = cache
-
-    def put(self, key: str, value: str) -> None:
-        self[key] = value

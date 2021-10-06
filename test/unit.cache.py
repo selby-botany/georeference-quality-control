@@ -37,26 +37,23 @@ class CacheTestCase(unittest.TestCase):
 
     def test_simple(self):
         cache = Cache(self.path)
-        cache.load()
         data = { self.randomNameString() : self.randomNameString(20) for _ in range(100) }
         notkeys = [ self.randomNameString() for _ in range(10) ]
         for key in data:
-            self.assertFalse(cache.exists(key))
+            self.assertFalse(key in cache)
         for key, value in data.items():
-            cache.put(key, value)
+            cache[key] = value
         for key in data:
-            self.assertTrue(cache.exists(key))
+            self.assertTrue(key in cache)
         for key in notkeys:
-            self.assertFalse(cache.exists(key))
-        cache.dump()
+            self.assertFalse(key in cache)
 
         cache2 = Cache(self.path)
-        cache2.load()
         for key, value in data.items():
-            self.assertTrue(cache.exists(key))
-            self.assertEqual(cache.get(key), value)
+            self.assertTrue(key in cache)
+            self.assertEqual(cache2[key], value)
         for key in notkeys:
-            self.assertFalse(cache.exists(key))
+            self.assertFalse(key in cache2)
 
 
 
