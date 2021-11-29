@@ -26,10 +26,10 @@ class CSVCut:
         try:
             opts, _args = getopt.getopt(argv, 'f:hi:o:', [
                                              'copyright',
-                                             'field=',
+                                             'field=', 'fields=',
                                              'help',
-                                             'input=',
-                                             'output='])
+                                             'input=', 'input-file=',
+                                             'output=', 'output-file='])
             for opt, arg in opts:
                 if opt in ['-f', '--field', '--fields']:
                     regex = re.compile('^([+-]?\d+)(-([+-]?\d+))?(\,([+-]?\d+)(-([+-]?\d+))?)*$')
