@@ -13,6 +13,7 @@ import unittest
 class ResponseStatusTestCase(unittest.TestCase):
     def setUp(self):
         self.statuses = [
+                            # This is in the correct sort order
                             ('pass', 'matching-country-and-pd1'),
                             ('pass', 'matching-location'),
                             ('internal-error', 'reverse-geolocate-error'),
@@ -53,7 +54,6 @@ class ResponseStatusTestCase(unittest.TestCase):
             self.assertEqual(ResponseStatus.from_str(f'{rs.action}.{rs.reason}'), rs)
 
     def test_sort(self):
-        # self.assertTrue(False, self.response_statuses)
         rs = deepcopy(self.response_statuses)
         random.shuffle(rs)
         self.assertListEqual(sorted(rs), self.response_statuses)

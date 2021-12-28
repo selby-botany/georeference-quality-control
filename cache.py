@@ -1,45 +1,50 @@
 #!/usr/bin/env python3
 
 
+from collections.abc import MutableMapping
 from datetime import datetime
 import json
 import logging
 import os
 
 
-class Cache:
+class Cache(MutableMapping):
     ''' Simple Dict backed cache that can be persisted '''
-    def __init__(self, cache_file: str):
-        self.cache_file = cache_file
+    def __init__(self, filepath: str, load: bool = True):
+        assert filepath, f'Missing filepath'
+        self.filepath = filepath
         self.__cache = {}
+        if load:
+            self._load()
 
-    def dump(self) -> None:
-        with open(self.cache_file, 'w+') as cachefile:
+    def __contains__(self, key: str) -> bool:
+        assert key, f'Missing key'
+        return (key in self.__cache)
+
+    def __delitem__(self, key: str) -> None:
+        assert key, f'Missing key'
+        del self.__cache[key]
+
+    def __getitem__(self, key: str) -> str:
+        assert key, f'Missing key'
+        return self.__cache[key]
+
+    def __iter__(self):
+        return self.__cache.keys()
+    
+    def __len__(self):
+        return len(self.__cache)
+
+    def __setitem__(self, key: str, value: str) -> None:
+        assert key, f'Missing key'
+        assert value, f'Missing value'
+        self.__cache[key] = value
+        with open(self.filepath, 'w+') as cachefile:
             json.dump(self.__cache, cachefile)
 
-    def exists(self, cachekey: str) -> bool:
-        assert cachekey, f'Missing cachekey'
-        result = (cachekey in self.__cache)
-        logging.debug(f'key «{cachekey}» => result «{result}»')
-        return result
-
-    def get(self, cachekey: str) -> str:
-        assert cachekey, f'Missing cachekey'
-        result = self.__cache[cachekey] if cachekey in self.__cache else None
-        if result and 'value' in result:
-            result = result['value']
-        logging.debug(f'key «{cachekey}» => result «{result}»')
-        return result
-
-    def load(self) -> None:
+    def _load(self) -> None:
         cache = {}
-        if os.path.exists(self.cache_file) and os.path.isfile(self.cache_file) and os.access(self.cache_file, os.R_OK) and (os.path.getsize(self.cache_file) >= len('''{}''')):
-            with open(self.cache_file, 'r') as filehandle:
+        if os.path.exists(self.filepath) and os.path.isfile(self.filepath) and os.access(self.filepath, os.R_OK) and (os.path.getsize(self.filepath) >= len('''{}''')):
+            with open(self.filepath, 'r') as filehandle:
                 cache = json.loads(filehandle.read())
         self.__cache = cache
-
-    def put(self, cachekey: str, value: str) -> None:
-        assert cachekey, f'Missing cachekey'
-        self.__cache[cachekey] = {'creation-time': datetime.utcnow().strftime('%Y%m%dT%H%M%S'), 'value': value }
-        self.dump()
-        logging.debug(f'(key «{cachekey}» <= value «{self.__cache[cachekey]})»')

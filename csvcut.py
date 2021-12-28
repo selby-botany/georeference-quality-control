@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
 import csv
+import errno
 import getopt
 import os.path
 import re
 import sys
 from typing import Any, Dict
-
 
 class CSVCut:
     '''Select fields from a CSV file'''
@@ -26,15 +26,17 @@ class CSVCut:
         try:
             opts, _args = getopt.getopt(argv, 'f:hi:o:', [
                                              'copyright',
-                                             'field=',
+                                             'field=', 'fields=',
                                              'help',
-                                             'input=',
-                                             'output='])
+                                             'input=', 'input-file=',
+                                             'output=', 'output-file='])
             for opt, arg in opts:
                 if opt in ['-f', '--field', '--fields']:
-                    regex = re.compile('^([+-]?\d+)(\,[+-]?\d+)*$')
+                    regex = re.compile('^([+-]?\d+)(-([+-]?\d+))?(\,([+-]?\d+)(-([+-]?\d+))?)*$')
                     if not regex.match(arg): raise ValueError(f'Bad {opt} value: {arg}')
-                    self.fields = fields = [int(f) for f in arg.split(',')]
+                    args = [ f.split('-') for f in arg.split(',') ]
+                    ranges = [ (int(i[0]), int(i[0])+1) if len(i) == 1 else (int(i[0]), int(i[1])+1) for i in args ]
+                    self.fields = sorted(list(set.union(*[ set([ i for i in range(r[0], r[1]) ]) for r in ranges ])))
                 elif opt in ['--copyright']:
                     print(self.copyright())
                     sys.exit()
@@ -103,9 +105,10 @@ Usage: csvcut [OPTION]...
 Copies selected fields from CSV input to CSV output.
 
       --copyright              Display the copyright and exit
-  -f, --field, --fields N[,N]*
-                               Field to cut. 'N' is the column number starting
-                               from 1.
+  -f, --field, --fields F[,F]*
+                               Field to cut. 'F' is single column number ('N')
+                               or a range of column numbers ('N-M'). Column
+                               numbers start from 1.
   -h, --help                   Display this help and exit
   -i, --input file             Input file; defaults to {__class__.DEFAULT_INPUT_FILE}
   -o, --output file            Output file; defaults to {__class__.DEFAULT_OUTPUT_FILE}
@@ -124,6 +127,9 @@ Copies selected fields from CSV input to CSV output.
 if __name__ == '__main__':
     try:
         sys.exit(CSVCut.instance(sys.argv[1:]).execute())
+    except IOError as e:
+        if e.errno == errno.EPIPE:
+            pass
     except KeyboardInterrupt as _:
         pass
 

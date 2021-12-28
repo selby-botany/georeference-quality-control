@@ -62,7 +62,6 @@ class GQC:
                             level=getattr(logging, self.config.value('log-level').upper(), getattr(logging, 'INFO')))
 
         self.cache = Cache(self.config.value('cache-file'));
-        self.cache.load()
 
         self.locationiq = LocationIQ(self.config)
         self.config.log_on_startup()
@@ -360,12 +359,12 @@ class GQC:
             usecache = self.config.value('cache-enabled')
         cachekey=f'latitude:{coordinate.latitude},longitude:{coordinate.longitude}'
         location = None
-        if usecache and self.cache.exists(cachekey):
-            location = Location.from_json(self.cache.get(cachekey))
+        if usecache and (cachekey in self.cache):
+            location = Location.from_json(self.cache[cachekey])
         elif not self.config.value("cache-only"):
             location = self.locationiq.reverse_geolocate(coordinate, wait)
             if location and usecache:
-                self.cache.put(cachekey, location.as_json())
+                self.cache[cachekey] = location.as_json()
         return location
 
     def _fuzzy_compare_score(self, a: str, b: str) -> int:
